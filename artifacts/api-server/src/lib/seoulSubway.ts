@@ -17,6 +17,14 @@ export const FRESH_LIMIT_SECONDS = 120;
 export const MAX_FUTURE_SKEW_SECONDS = 90;
 export const STALE_CACHE_MAX_MS = 10 * 60_000;
 export const UPSTREAM_TIMEOUT_MS = 7_000;
+/**
+ * The provider only serves plain HTTP: as of 2026-10-14 port 443 on
+ * swopenapi.seoul.go.kr times out, so there is no TLS endpoint to call.
+ * The key therefore crosses the network in the URL path (server → provider
+ * only; it never reaches clients or logs). Set SEOUL_SUBWAY_API_BASE to an
+ * HTTPS relay to avoid that; any other plaintext base is rejected.
+ */
+export const OFFICIAL_UPSTREAM_BASE = "http://swopenapi.seoul.go.kr";
 export const COVERAGE =
   "서울 열린데이터광장 지하철 실시간 열차 위치정보(realtimePosition) · 1–9호선 · 역 단위 관측 · 좌표·속도·곡선 진입 시각 미제공";
 
@@ -51,6 +59,50 @@ export type Upstream =
   | { kind: "error"; code: string };
 
 export type TrainQuery = { line: number; direction?: "0" | "1"; station?: string };
+
+export class UpstreamBaseError extends Error {
+  constructor() {
+    super("SEOUL_SUBWAY_API_BASE must be an https:// URL (plaintext is only allowed for the official host)");
+    this.name = "UpstreamBaseError";
+  }
+}
+
+/**
+ * Resolves the provider base URL. Unset → official host. Otherwise only
+ * https:// bases are accepted, because the key travels in the URL path.
+ * The error never echoes the value (it could contain credentials).
+ */
+export function resolveUpstreamBase(raw: string | undefined): string {
+  const value = raw?.trim();
+  if (!value) return OFFICIAL_UPSTREAM_BASE;
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new UpstreamBaseError();
+  }
+  const base = `${url.origin}${url.pathname}`.replace(/\/+$/, "");
+  if (base === OFFICIAL_UPSTREAM_BASE) return OFFICIAL_UPSTREAM_BASE;
+  if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash) {
+    throw new UpstreamBaseError();
+  }
+  return base;
+}
+
+/**
+ * Line 2 loop trains report "성수종착" ("terminates at 성수") in statnTnm and,
+ * while standing at 성수, also in statnNm. Reduce it to the plain station
+ * name. Branch platforms such as "성수지선"/"신도림지선" are distinct and stay.
+ */
+export function stripTerminalSuffix(raw: string | undefined): string {
+  const value = (raw ?? "").trim().replace(/\s+/g, "");
+  const stripped = value.replace(/종착$/, "");
+  return stripped || value;
+}
+
+export function cleanDestination(raw: string | undefined): string {
+  return stripTerminalSuffix(raw) || "행선지 미상";
+}
 
 /** Interprets both the success shape and the bare-error shape of the provider JSON. */
 export function interpretPayload(json: unknown): Upstream {
@@ -100,7 +152,7 @@ export function directionLabel(line: number, code: "0" | "1"): string {
 
 export function toTrain(row: RawPosition, line: number, now: number): Train | null {
   const id = (row.trainNo ?? "").trim();
-  const station = (row.statnNm ?? "").trim();
+  const station = stripTerminalSuffix(row.statnNm);
   const dir = row.updnLine === "0" || row.updnLine === "1" ? row.updnLine : null;
   const observedAt = parseObservedAt(row);
   if (!id || !station || !dir || !observedAt) return null;
@@ -113,7 +165,7 @@ export function toTrain(row: RawPosition, line: number, now: number): Train | nu
     station,
     direction: directionLabel(line, dir),
     directionCode: dir,
-    destination: (row.statnTnm ?? "").trim() || "행선지 미상",
+    destination: cleanDestination(row.statnTnm),
     state: STATE_LABELS[stateCode] ?? "상태 미상",
     stateCode,
     observedAt,
@@ -192,6 +244,8 @@ export type FetchLike = (
 export interface SubwayServiceOptions {
   getKey: () => string | undefined;
   fetchImpl: FetchLike;
+  /** Provider base URL from resolveUpstreamBase. Defaults to the official host. */
+  upstreamBase?: string;
   now?: () => number;
   quota?: QuotaGuard;
   log?: { warn: (obj: Record<string, unknown>, msg: string) => void };
@@ -207,6 +261,7 @@ type LineResult =
 
 export function createSubwayService(opts: SubwayServiceOptions) {
   const now = opts.now ?? Date.now;
+  const upstreamBase = opts.upstreamBase ?? OFFICIAL_UPSTREAM_BASE;
   const quota = opts.quota ?? createQuotaGuard();
   const cache = new Map<number, CacheEntry>();
   const inflight = new Map<number, Promise<LineResult>>();
@@ -216,7 +271,7 @@ export function createSubwayService(opts: SubwayServiceOptions) {
     const stale = prior && now() - prior.at <= STALE_CACHE_MAX_MS ? prior : null;
     if (!quota.canSpend(now())) return { kind: "quota", stale };
     quota.spend(now());
-    const url = `http://swopenapi.seoul.go.kr/api/subway/${encodeURIComponent(key)}/json/realtimePosition/0/199/${encodeURIComponent(`${line}호선`)}`;
+    const url = `${upstreamBase}/api/subway/${encodeURIComponent(key)}/json/realtimePosition/0/199/${encodeURIComponent(`${line}호선`)}`;
     try {
       const res = await opts.fetchImpl(url, { signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS) });
       if (!res.ok) {

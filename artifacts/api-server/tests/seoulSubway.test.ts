@@ -1,10 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  OFFICIAL_UPSTREAM_BASE,
+  cleanDestination,
   createQuotaGuard,
   createSubwayService,
   interpretPayload,
   parseObservedAt,
+  resolveUpstreamBase,
   selectTrains,
   stationMatches,
   type FetchLike,
@@ -155,4 +158,64 @@ test("auth rejection is reported without exposing details", async () => {
   const res = await svc.getTrains({ line: 5 });
   assert.equal(res.status, "unavailable");
   assert.ok(!JSON.stringify(res).includes(KEY));
+});
+
+// Shape captured from the live provider on 2026-10-14 (paging fields included).
+const LIVE_PAYLOAD = {
+  errorMessage: { status: 200, code: "INFO-000", message: "정상 처리되었습니다.", link: "", developerMessage: "", total: 3 },
+  realtimePositionList: [
+    { beginRow: null, endRow: null, curPage: null, pageRow: null, totalCount: 3, rowNum: 1, selectedCount: 3, subwayId: "1002", subwayNm: "2호선", statnId: "1002000216", statnNm: "잠실", trainNo: "2277", lastRecptnDt: "20261014", recptnDt: "2026-10-14 13:59:50", updnLine: "1", statnTid: "1002000211", statnTnm: "성수종착", trainSttus: "1", directAt: "0", lstcarAt: "0" },
+    { beginRow: null, endRow: null, curPage: null, pageRow: null, totalCount: 3, rowNum: 2, selectedCount: 3, subwayId: "1002", subwayNm: "2호선", statnId: "1002000223", statnNm: "교대", trainNo: "3276", lastRecptnDt: "20261014", recptnDt: "2026-10-14 13:59:01", updnLine: "0", statnTid: "1002000211", statnTnm: "성수종착", trainSttus: "0", directAt: "0", lstcarAt: "0" },
+    { beginRow: null, endRow: null, curPage: null, pageRow: null, totalCount: 3, rowNum: 3, selectedCount: 3, subwayId: "1002", subwayNm: "2호선", statnId: "1002002341", statnNm: "신도림지선", trainNo: "5615", lastRecptnDt: "20261014", recptnDt: "2026-10-14 13:58:43", updnLine: "1", statnTid: "1002002341", statnTnm: "신도림지선", trainSttus: "1", directAt: "0", lstcarAt: "0" },
+  ],
+};
+
+test("live provider payload: loop destinations are cleaned, branch platforms stay distinct", () => {
+  const up = interpretPayload(LIVE_PAYLOAD);
+  assert.equal(up.kind, "rows");
+  const trains = selectTrains(up.kind === "rows" ? up.rows : [], { line: 2 }, NOW);
+  assert.equal(trains.length, 3);
+  const byId = new Map(trains.map((t) => [t.id, t]));
+  assert.equal(byId.get("2277")!.destination, "성수");
+  assert.equal(byId.get("2277")!.direction, "외선");
+  assert.equal(byId.get("3276")!.direction, "내선");
+  assert.equal(byId.get("3276")!.state, "진입");
+  assert.equal(byId.get("5615")!.destination, "신도림지선");
+  assert.deepEqual(selectTrains(up.kind === "rows" ? up.rows : [], { line: 2, station: "신도림" }, NOW), []);
+  const atTerminal = selectTrains([row({ statnNm: "성수종착", trainNo: "2290" })], { line: 2, station: "성수" }, NOW);
+  assert.deepEqual(atTerminal.map((t) => [t.id, t.station]), [["2290", "성수"]]);
+});
+
+test("cleanDestination strips only the terminal suffix", () => {
+  assert.equal(cleanDestination("성수종착"), "성수");
+  assert.equal(cleanDestination(" 까치산 "), "까치산");
+  assert.equal(cleanDestination("성수지선"), "성수지선");
+  assert.equal(cleanDestination("종착"), "종착");
+  assert.equal(cleanDestination(""), "행선지 미상");
+  assert.equal(cleanDestination(undefined), "행선지 미상");
+});
+
+test("upstream base: official host by default, https relays only, value never echoed", () => {
+  assert.equal(resolveUpstreamBase(undefined), OFFICIAL_UPSTREAM_BASE);
+  assert.equal(resolveUpstreamBase("  "), OFFICIAL_UPSTREAM_BASE);
+  assert.equal(resolveUpstreamBase("http://swopenapi.seoul.go.kr/"), OFFICIAL_UPSTREAM_BASE);
+  assert.equal(resolveUpstreamBase("https://relay.example.com/seoul/"), "https://relay.example.com/seoul");
+  for (const bad of ["http://relay.example.com", "ftp://x", "not a url", "https://user:pw@relay.example.com", "https://relay.example.com/?k=1"]) {
+    assert.throws(
+      () => resolveUpstreamBase(bad),
+      (err: unknown) => err instanceof Error && !err.message.includes(bad),
+      bad,
+    );
+  }
+});
+
+test("service calls the configured upstream base", async () => {
+  const { fn, calls } = okFetch([row()]);
+  const svc = createSubwayService({ getKey: () => KEY, fetchImpl: fn, now: () => NOW, upstreamBase: "https://relay.example.com/seoul" });
+  await svc.getTrains({ line: 2 });
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0]!.startsWith("https://relay.example.com/seoul/api/subway/"));
+  const dflt = okFetch([row()]);
+  await createSubwayService({ getKey: () => KEY, fetchImpl: dflt.fn, now: () => NOW }).getTrains({ line: 2 });
+  assert.ok(dflt.calls[0]!.startsWith(`${OFFICIAL_UPSTREAM_BASE}/api/subway/`));
 });
