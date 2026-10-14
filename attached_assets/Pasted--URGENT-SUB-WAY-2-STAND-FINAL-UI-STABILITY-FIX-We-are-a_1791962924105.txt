@@ -1,0 +1,119 @@
+# URGENT — SUB WAY 2 STAND FINAL UI & STABILITY FIX
+
+We are approaching the end of the hackathon.
+
+The current mobile app is not at an acceptable level of visual quality or reliability. I need you to fix the actual running application, not write another specification.
+
+## PRIORITY 1 — Fix the live train connection
+
+The Select Train screen currently displays:
+
+- "실시간 서버에 연결할 수 없음"
+- "열차 목록을 불러오지 못했어요"
+
+You previously confirmed that the backend successfully returns real Seoul subway trains.
+
+Investigate why the actual mobile client fails while the backend works.
+
+Check:
+
+- API base URL in the running Expo application
+- Development server availability and restart behavior
+- Network access from physical devices
+- Differences between preview and deployed environments
+- Error handling, retries, and stale cached data
+
+Implement automatic recovery from temporary connection failures.
+
+The user should not have to restart the entire app when the backend temporarily becomes unavailable.
+
+Display a clear offline state without breaking the train-selection experience.
+
+Verify the complete client-to-server connection, not just the backend endpoint.
+
+## PRIORITY 2 — Finish and integrate Task #8
+
+The Motion OS — Dark Edition redesign was requested multiple times but is still not present in the running app.
+
+**Complete Task #8 and merge its changes into the actual application.**
+
+Do not create another design document.
+
+The visual requirements are:
+
+- Deep black background: #05070B
+- Dark surfaces: #0C111B
+- Neon lime accent: #C8FF3C
+- Large, confident typography
+- Minimal borders and cards
+- Strong visual hierarchy
+- Premium native mobile appearance
+- Elegant, subtle animations
+- Clear Seoul subway line identification
+
+The current amber warning cards, cluttered boxes, and outdated illustration-based interface must be replaced.
+
+### Select Train
+
+Create a clean, premium train-selection experience.
+
+Use prominent typography, beautifully organized line selectors, station search, and a clear primary action.
+
+API failures should be handled elegantly rather than dominating the entire screen.
+
+### Motion Live
+
+This must be the visual centerpiece of the app.
+
+Emphasize:
+
+1. Upcoming motion direction
+2. Estimated timing
+3. Motion intensity
+4. Prediction availability
+
+Replace the leaning-person illustration with a sophisticated minimal motion gauge.
+
+Use animations purposefully.
+
+Clearly distinguish LIVE, SIMULATION, and PREDICTION HOLD.
+
+## PRIORITY 3 — Protect the working functionality
+
+Preserve the existing:
+
+- Seoul subway API integration
+- Train selection
+- Physics simulation
+- Prediction confidence handling
+- Korean voice and haptic functionality
+- Existing tests
+
+Do not merge unfinished experimental tasks that could destabilize the app.
+
+If Task #8 conflicts with ongoing integration work, resolve the conflict safely and prioritize the working mobile experience.
+
+## PRIORITY 4 — Verify the actual result
+
+Do not claim completion until you have:
+
+1. Run the native mobile application.
+2. Verified the Select Train screen.
+3. Verified the Motion Live screen.
+4. Confirmed live API requests succeed through the actual client.
+5. Tested error recovery.
+6. Run TypeScript checks and existing automated tests.
+7. Inspected screenshots of both redesigned screens.
+8. Checked that no content is clipped or overlapping on a narrow mobile display.
+
+If a physical phone is unavailable, clearly distinguish preview verification from device verification.
+
+## FINAL REQUIREMENT
+
+**I do not want another plan, another design specification, or a status report claiming that the design will be applied later.**
+
+I want the actual application to look and behave like Motion OS — Dark Edition.
+
+Prioritize a stable, visually exceptional, working MVP over additional experimental features.
+
+Start implementing immediately and show the actual results.
