@@ -1,59 +1,58 @@
 /**
- * Semantic design tokens for the mobile app.
+ * SUB WAY 2 STAND — dark "ink" palette. The app is dark-only so riders can glance at it
+ * in a bright or dim carriage without the screen flaring.
  *
- * These tokens mirror the naming conventions used in web artifacts (index.css)
- * so that multi-artifact projects share a cohesive visual identity.
- *
- * Replace the placeholder values below with values that match the project's
- * brand. If a sibling web artifact exists, read its index.css and convert the
- * HSL values to hex so both artifacts use the same palette.
- *
- * To add dark mode, add a `dark` key with the same token names.
- * The useColors() hook will automatically pick it up.
+ * Semantic accents:
+ *   warn (amber)       → approaching curve / sway warning
+ *   live (mint)        → real, station-level observation
+ *   synthetic (lavender) → SYNTHETIC physics demonstration
+ *   destructive (red)  → errors
+ * Seoul line colours live in constants/lines.ts and are used only for line identity.
  */
+const palette = {
+  text: '#F3EEE3',
+  tint: '#F3EEE3',
 
-const colors = {
-  light: {
-    // Legacy aliases (kept for backward compatibility)
-    text: '#0a0a0a',
-    tint: '#2f95dc',
+  background: '#0B0E13',
+  foreground: '#F3EEE3',
 
-    // Core surfaces
-    background: '#ffffff',
-    foreground: '#0a0a0a',
+  card: '#131821',
+  cardForeground: '#F3EEE3',
+  raised: '#1A202B',
 
-    // Cards / elevated surfaces
-    card: '#f9f9f9',
-    cardForeground: '#0a0a0a',
+  primary: '#F3EEE3',
+  primaryForeground: '#0B0E13',
 
-    // Primary action color (buttons, links, active states)
-    primary: '#2f95dc',
-    primaryForeground: '#ffffff',
+  secondary: '#1A202B',
+  secondaryForeground: '#F3EEE3',
 
-    // Secondary / less-emphasis interactive surfaces
-    secondary: '#f0f0f0',
-    secondaryForeground: '#1a1a1a',
+  muted: '#1A202B',
+  mutedForeground: '#9BA3B1',
+  faint: '#5D6573',
 
-    // Muted / subdued elements (dividers, timestamps, placeholders)
-    muted: '#f0f0f0',
-    mutedForeground: '#737373',
+  accent: '#FFB547',
+  accentForeground: '#1A1204',
 
-    // Accent highlights (badges, selected items, focus rings)
-    accent: '#f0f0f0',
-    accentForeground: '#1a1a1a',
+  warn: '#FFB547',
+  warnSoft: 'rgba(255,181,71,0.13)',
+  live: '#46D99B',
+  liveSoft: 'rgba(70,217,155,0.12)',
+  synthetic: '#B9A4FF',
+  syntheticSoft: 'rgba(185,164,255,0.13)',
 
-    // Destructive actions (delete, error states)
-    destructive: '#ef4444',
-    destructiveForeground: '#ffffff',
+  destructive: '#FF6B5E',
+  destructiveSoft: 'rgba(255,107,94,0.13)',
+  destructiveForeground: '#0B0E13',
 
-    // Borders and input outlines
-    border: '#e5e5e5',
-    input: '#e5e5e5',
-  },
-
-  // Border radius (in px). Sync from the sibling web artifact's --radius
-  // CSS variable. This value applies to cards, buttons, inputs, and modals.
-  radius: 8,
+  border: '#252C38',
+  input: '#252C38',
 };
 
+const colors = {
+  light: palette,
+  dark: palette,
+  radius: 14,
+};
+
+export type Palette = typeof palette;
 export default colors;

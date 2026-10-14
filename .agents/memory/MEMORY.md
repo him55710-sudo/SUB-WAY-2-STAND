@@ -1,0 +1,1 @@
+- [Task-agent coordination](task-coordination.md) — file ownership across parallel tasks, merge lock behavior, reuse existing tested modules, node test command quirk.
