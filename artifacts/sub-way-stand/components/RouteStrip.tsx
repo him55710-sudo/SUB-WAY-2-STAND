@@ -3,10 +3,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import Svg, { Circle, Line } from 'react-native-svg';
-import { APP_CONFIG } from '@/config/flags';
-import type { Forecast, RideSelection, RouteSegment, TrainCandidate } from '@/contracts';
+import type { Forecast, RideSelection, TrainCandidate } from '@/contracts';
 import { useColors } from '@/hooks/useColors';
-import { SYN_A, findCurves, trackLength } from '@/lib/physics';
+import { getSimulationRide } from '@/services/simulation';
 import { findSegment, getRoute } from '@/services/trains';
 import {
   TURN_KO,
@@ -23,24 +22,6 @@ const RAIL_Y = 38;
 const PAD = 22;
 const ROLE_KO: Record<StationRole, string> = { prev: '이전', current: '현재', next: '다음' };
 
-/** The invented SYN-A track as a single segment, for simulations that don't supply one. */
-const SYN_SEGMENT: RouteSegment = {
-  id: SYN_A.id,
-  from: '가상 출발점',
-  to: '가상 도착점',
-  directionCode: '1',
-  lengthM: trackLength(SYN_A),
-  curves: findCurves(SYN_A).map((cv) => ({
-    id: `${SYN_A.id}-${cv.id}`,
-    startOffsetM: cv.start,
-    lengthM: cv.end - cv.start,
-    radiusM: cv.radius,
-    turn: cv.turn,
-    source: 'synthetic' as const,
-    confidence: 'low' as const,
-  })),
-};
-
 export interface RouteStripData {
   model: RouteStripModel | null;
   origin: { label: string; tone: Tone };
@@ -56,14 +37,45 @@ export function routeStripData(
   forecast: Forecast,
   train: TrainCandidate | null,
 ): RouteStripData {
-  const line = selection.kind === 'live' ? selection.line : APP_CONFIG.defaultLine;
-  const route = getRoute(line);
   const targetCurveId = forecast.targetCurve?.id ?? null;
-  const routeOrigin = route
-    ? route.origin === 'curated'
-      ? { label: '검수 노선 자료', tone: 'live' as Tone }
-      : { label: '예시 노선 · 가상 곡선', tone: 'warn' as Tone }
-    : { label: '노선 자료 없음', tone: 'muted' as Tone };
+
+  // Simulation: draw exactly the segment the simulated ride runs on (one segment, looped).
+  if (selection.kind === 'simulation') {
+    const ride = getSimulationRide(selection.scenarioId);
+    const seg = ride?.segment ?? null;
+    return {
+      model: seg
+        ? buildRouteStrip({
+            into: seg,
+            outOf: null,
+            anchor: seg.to,
+            train: forecast.positionM ? { on: 'into', offsetM: forecast.positionM } : null,
+            targetCurveId,
+            fullWidth: true,
+          })
+        : null,
+      origin: { label: '가상 주행', tone: 'synthetic' },
+      note: !ride
+        ? '알 수 없는 시뮬레이션입니다.'
+        : ride.usesRouteData
+          ? `${ride.label} · ${Math.round(ride.segment.lengthM)} m · 역 좌표로 근사한 곡선 위를 가상으로 달립니다. 실제 열차와 무관합니다.`
+          : `${ride.label} · ${Math.round(ride.segment.lengthM)} m · 실제 노선이 아닌 시연용 선로입니다.`,
+      synthetic: true,
+      estimatedFromState: false,
+    };
+  }
+
+  const line = selection.line;
+  const route = getRoute(line);
+  // "검수" only when every curve is verified; station-derived curves are labeled as approximations.
+  const verified = !!route && route.segments.every((s) => s.curves.every((cv) => cv.source === 'curated'));
+  const routeOrigin = !route
+    ? { label: '노선 자료 없음', tone: 'muted' as Tone }
+    : route.origin !== 'curated'
+      ? { label: '예시 노선 · 가상 곡선', tone: 'warn' as Tone }
+      : verified
+        ? { label: '검수 노선 자료', tone: 'live' as Tone }
+        : { label: '역 좌표 근사 곡선', tone: 'warn' as Tone };
 
   let input: StripInput | null = null;
   let estimatedFromState = false;
@@ -84,7 +96,7 @@ export function routeStripData(
         : placementFromState(train?.stateCode ?? null, into, outOf),
       targetCurveId,
     };
-  } else if (selection.kind === 'live' && train) {
+  } else if (train) {
     const into = findSegment(line, train.station, train.directionCode, 'into');
     const outOf = findSegment(line, train.station, train.directionCode, 'outOf');
     estimatedFromState = true;
@@ -94,21 +106,6 @@ export function routeStripData(
       anchor: train.station,
       train: placementFromState(train.stateCode, into, outOf),
       targetCurveId,
-    };
-  } else if (selection.kind === 'simulation') {
-    return {
-      model: buildRouteStrip({
-        into: SYN_SEGMENT,
-        outOf: null,
-        anchor: SYN_SEGMENT.to,
-        train: forecast.positionM ? { on: 'into', offsetM: forecast.positionM } : null,
-        targetCurveId,
-        fullWidth: true,
-      }),
-      origin: { label: '가상 선로', tone: 'synthetic' },
-      note: `${SYN_A.name} · ${Math.round(SYN_SEGMENT.lengthM)} m · 실제 노선이 아닌 시연용 선로입니다.`,
-      synthetic: true,
-      estimatedFromState: false,
     };
   }
 

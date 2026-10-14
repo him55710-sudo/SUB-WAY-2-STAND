@@ -12,8 +12,9 @@ description: How main-agent work interacts with the parallel project tasks (#1 s
 - A task merge shows "MERGING … WAITING_FOR_LOCK" while the main agent is mid-turn; it proceeds after the main turn ends.
   **How to apply:** don't keep editing main during a pending merge. Finish, keep main compiling, end the turn.
 
-- Main already holds pre-built, tested modules from before the task split (physics engine, alert policy, announcer,
-  freshness, UI components, server proxy). Task agents should reuse them rather than re-create them.
+- Keep exactly one guidance (speech/haptic decision) policy and one ride-session store. Extend the existing ones instead of
+  adding parallel versions.
+  **Why:** duplicate policies left over from before the task split made the integration review ambiguous about which one ran.
 
 - Mobile `pnpm test` runs both `tests/**/*.test.ts` and `tests/**/*.test.mts` (Node runner, type stripping; a bare
   directory arg fails). `lib/` files may value-import each other with relative `./x.ts`

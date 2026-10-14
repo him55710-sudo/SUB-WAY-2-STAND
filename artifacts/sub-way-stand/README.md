@@ -5,16 +5,19 @@ which way your body will sway before the train enters a curve, and says it out
 loud ("약 10초 후 오른쪽 곡선입니다. 왼쪽으로 쏠림에 대비하세요.") with a
 matching vibration, so you can brace without looking at the screen.
 
-The app is strict about honesty: every number on screen is labeled as a
-**live estimate**, **fixture** (bundled example) or **simulation**. When the data
-is not good enough, it stays silent and shows the reason instead of guessing.
+The app is strict about honesty: every screen labels its data source as a
+**live estimate**, **cache**, **simulation**, or an explicit failure state
+(**missing key**, **quota**, **offline**). When the data is not good enough, it
+stays silent and shows the reason instead of guessing.
 
 ---
 
 ## How it works (user journey)
 
 1. **열차 선택**: pick a live train on a line (from the Seoul realtime feed),
-   or choose **시뮬레이션으로 체험** to try an invented track.
+   or tap **시뮬레이션으로 체험** for a labeled virtual ride on one Line 2
+   segment (신촌→홍대입구) using the bundled approximate curves. The simulation
+   button stays available when live data is missing, so the fallback is one tap.
 2. **탑승 안내**: the ride screen recomputes a forecast every second:
    which side you will be pushed to, the time window until curve entry, the
    lateral acceleration range and a confidence level. It also explains why it
@@ -37,12 +40,15 @@ Inside the app, screens only call services; each service implements a
 signature from `contracts/index.ts`:
 
 ```
-screens/  ──▶ services/trains.ts      live trains + route data (via the API)
-          ──▶ services/forecast.ts    Forecast every second (lib/physics.ts)
-          ──▶ services/simulation.ts  invented demo scenarios
+screens/  ──▶ services/trains.ts      live trains (services/trainFeed.ts) + route data (data/line2.ts, data/routeGeometry.ts)
+          ──▶ services/forecast.ts    Forecast every second (lib/forecastEngine.ts, lib/forecastProfile.ts)
+          ──▶ services/simulation.ts  labeled simulation (lib/simulationRide.ts)
           ──▶ services/guidance.ts    Korean TTS + haptics (lib/guidanceRules.ts)
 config/flags.ts   feature flags (all ON by default)
 ```
+
+The pure modules (`services/trainFeed.ts`, `data/*`, `lib/*`,
+`components/uiModel.ts`) carry all the logic and are what the tests load.
 
 ### Physics (short version)
 
@@ -55,6 +61,11 @@ model suspension, cabin vibration or crowds.
   ranges. If the window is too wide, the sway direction is ambiguous, or the
   train is stopped, stale, delayed or lost, the forecast is **suppressed** with
   a reason.
+- **Live rides only give a direction from verified curves** (`source: 'curated'`).
+  The bundled Line 2 curves are station-geometry approximations, so a live ride
+  today always ends in a hold: **확신이 낮아 안내 보류** (`low-confidence`),
+  with the curve, its source and the observation age in the explanation. The
+  simulation runs on the same approximate curves and is labeled as simulation.
 
 ### Voice guidance rules (`lib/guidanceRules.ts`, unit-tested)
 
@@ -76,12 +87,11 @@ taps 140 ms apart.
 
 | Data | Source | Label in the app |
 |---|---|---|
-| Train observations | Seoul Open Data Plaza `realtimePosition` (lines 1–9) through our proxy. **Station-level only**: last station, state (진입/도착/출발/전역출발), direction, timestamp. No coordinates, no speed, no curve timing. | live (`origin: 'live'`), with freshness |
-| Example trains | Bundled fixture trains, used before the live feed is connected | `[예시]`, `origin: 'fixture'` |
+| Train observations | Seoul Open Data Plaza `realtimePosition` (lines 1–9) through our proxy. **Station-level only**: last station, state (진입/도착/출발/전역출발), direction, timestamp. No coordinates, no speed, no curve timing. | 실시간 / 캐시 banner; per-train freshness (`N초 전 관측`); 키 없음 / 호출 한도 / 연결 불가 when it fails. No example trains are ever shown in place of live data. |
 | Station positions | Approximate public station coordinates | station-level, approximate |
-| Curve geometry | Approximated from station geometry or curated by hand. **Not surveyed track alignment.** | `source: 'station-geometry-approx' \| 'curated'` with a confidence |
-| Live forecast | Estimated from station-level data + approximate curves, shown as ranges | `실시간 추정` (`source: 'live-estimate'`) |
-| Simulation | Invented track **SYN-A** (left R450, right R300) at 12–16 m/s. Not linked to any real train. | `[시뮬레이션]`, spoken prefix "시뮬레이션 안내:" |
+| Curve geometry | Line 2 main loop (43 stations): curves approximated from OpenStreetMap station coordinates. **Not surveyed track alignment.** | Route card badge **역 좌표 근사 곡선** (only fully verified data would read 검수 노선 자료); `source: 'station-geometry-approx'` with a confidence |
+| Live forecast | Estimated from station-level data, shown as ranges; direction only from verified curves | **실시간 관측 기반 추정** (`source: 'live-estimate'`) |
+| Simulation | A virtual train on Line 2 신촌→홍대입구 (1.24 km, approximate curves), looping every ~113 s. Not linked to any real train. | **시뮬레이션 · 가상 선로**, route badge **가상 주행**, spoken prefix "시뮬레이션 안내:" |
 
 Because the live feed has no speed or exact position, live forecasts are
 estimates. They are often suppressed (for example when the train is stopped
@@ -114,13 +124,22 @@ Set to `0` before starting Expo to switch off:
 ### Tests and checks
 
 ```bash
-pnpm --filter @workspace/sub-way-stand test       # mobile unit tests (node --test)
-pnpm --filter @workspace/sub-way-stand typecheck
+pnpm --filter @workspace/sub-way-stand test       # mobile unit + integration tests (node --test)
+pnpm --filter @workspace/api-server test          # proxy tests + pinned response fixtures
 pnpm run typecheck                                 # whole monorepo
 ```
 
 Mobile tests run under plain Node with type stripping. Keep tested logic in
-pure modules under `lib/` (type-only imports, relative paths with `.ts`).
+pure modules (type-only imports, relative paths with `.ts`).
+
+**Integration tests** chain the whole journey without network:
+`artifacts/api-server/tests/integration.test.ts` turns a provider payload into
+schema-validated responses and pins them in `artifacts/api-server/tests/fixtures/`;
+`tests/integration.test.ts` (mobile) reads those same JSON files and runs
+trains mapping → segment lookup → forecast → guidance decision for the live,
+simulation, missing-key, stationary, stale/lost/unknown-line and flag cases.
+After an intentional API contract change, regenerate the fixtures with
+`UPDATE_FIXTURES=1 pnpm --filter @workspace/api-server test`.
 
 ## Known limitations
 
@@ -132,10 +151,12 @@ pure modules under `lib/` (type-only imports, relative paths with `.ts`).
   comfort model, crowding or braking or acceleration on straights.
 - **Quota**: the Seoul API allows about 1000 calls a day. The proxy caches and
   keeps a reserve, so during heavy demos it can report `quota`.
-- **Upstream transport**: the realtime API is called at
-  `http://swopenapi.seoul.go.kr` (plain HTTP; the HTTPS host timed out from
-  Replit during development). The key is only used server-side, but it
-  travels unencrypted on the server→Seoul hop until the proxy moves to TLS.
+- **Upstream transport**: the official realtime API is only reachable at
+  `http://swopenapi.seoul.go.kr` (the HTTPS host timed out from Replit). The
+  key is only used server-side, but on that hop it travels unencrypted. Set
+  `SEOUL_SUBWAY_API_BASE` to an HTTPS relay to avoid this; plain-HTTP
+  overrides are rejected.
+- **Live guidance is held** until verified curve data exists (see Physics).
 - **TTS quality depends on the device.** Phones without a Korean voice
   (or browsers without one) report voice as unavailable.
 - **Guidance works only in the foreground.** Leaving the app stops speech
@@ -146,4 +167,4 @@ pure modules under `lib/` (type-only imports, relative paths with `.ts`).
 ## Demo
 
 See [`docs/DEMO.md`](docs/DEMO.md) for a 2-minute judge walkthrough
-(simulation and live paths).
+(simulation and live paths). `/ride?sim=1` opens the simulation directly.

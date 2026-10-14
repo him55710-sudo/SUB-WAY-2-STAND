@@ -45,6 +45,17 @@ export interface FeedBannerModel {
   suggestSimulation: boolean;
 }
 
+/**
+ * Ride-screen badge for the tracked train's feed. Anything other than a fresh,
+ * uncached live response (cache, degraded, quota, offline, …) is surfaced;
+ * `null` while loading or for a fresh live response.
+ */
+export function rideFeedBadge(feed: FeedStatus | null, liveEnabled: boolean): FeedBannerModel | null {
+  if (!feed) return null;
+  const m = feedBanner(feed, liveEnabled);
+  return m.kind === 'live' ? null : m;
+}
+
 export function feedBanner(feed: FeedStatus, liveEnabled: boolean): FeedBannerModel {
   if (!liveEnabled) {
     return {

@@ -4,7 +4,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useReducedMotion } from 'react-native-reanimated';
-import type { Forecast, GuidanceState, TrainCandidate } from '@/contracts';
+import { FLAGS } from '@/config/flags';
+import type { FeedStatus, Forecast, GuidanceState, TrainCandidate } from '@/contracts';
 import { spacing, typography } from '@/constants/colors';
 import { useColors } from '@/hooks/useColors';
 import { useRideSession } from '@/session/RideSession';
@@ -23,6 +24,7 @@ import {
   TURN_KO,
   confidenceBadge,
   etaPhrase,
+  rideFeedBadge,
   leanDegrees,
   ridePhase,
   sourceLabel,
@@ -43,8 +45,8 @@ export default function RideScreen() {
   const forecast = useForecast(selection);
   const guidance = useGuidance(forecast);
 
-  // Shareable demo link: /ride?sim=1 opens straight into the labeled simulation.
-  const wantsSim = params.sim === '1';
+  // Shareable demo link: /ride?sim=1 opens straight into the labeled simulation (unless that flag is off).
+  const wantsSim = params.sim === '1' && FLAGS.simulationFallback;
   useEffect(() => {
     if (!selection && wantsSim) {
       select({ kind: 'simulation', scenarioId: DEFAULT_SCENARIO_ID, selectedAt: new Date().toISOString() });
@@ -86,6 +88,7 @@ export default function RideScreen() {
           train={train}
           now={now}
           lost={tracked.lost}
+          feed={live && !tracked.isLoading ? tracked.feed : null}
           feedMessage={tracked.feed.message}
           scenarioTitle={scenario?.titleKo ?? null}
         />
@@ -112,6 +115,7 @@ function SourceStrip({
   train,
   now,
   lost,
+  feed,
   feedMessage,
   scenarioTitle,
 }: {
@@ -119,6 +123,8 @@ function SourceStrip({
   train: TrainCandidate | null;
   now: number;
   lost: boolean;
+  /** Tracked-train feed (live rides only, once loaded). */
+  feed: FeedStatus | null;
   feedMessage: string;
   scenarioTitle: string | null;
 }) {
@@ -129,6 +135,8 @@ function SourceStrip({
   const src = fixture ? { label: '예시 데이터 · 실제 관측 아님', tone: 'warn' as const } : sourceLabel(forecast);
   const t = useTone(src.tone);
   const fresh = train && !sim && !fixture ? candidateFreshness(train, now) : null;
+  // Cache / quota / offline: say so here too, not only on the select screen.
+  const feedState = sim ? null : rideFeedBadge(feed, FLAGS.liveTrains);
 
   return (
     <View style={[styles.strip, { backgroundColor: c.background, borderBottomColor: c.border }]}>
@@ -148,9 +156,10 @@ function SourceStrip({
             ? `${train.id}열차 · ${stateSentence(train)} · ${train.destination}행 · ${train.direction}`
             : feedMessage}
       </Text>
-      {fresh || lost ? (
+      {fresh || lost || feedState ? (
         <View style={styles.stripBadges}>
           {fresh ? <Badge label={fresh.label} tone={fresh.tone} dot /> : null}
+          {feedState ? <Badge label={`${feedState.label} · ${feedState.title}`} tone={feedState.tone} icon={feedState.icon} /> : null}
           {lost ? <Badge label="피드에서 사라짐 · 마지막 관측 표시" tone="danger" icon="alert-triangle" /> : null}
         </View>
       ) : null}

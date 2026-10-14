@@ -1,15 +1,17 @@
 # SUB WAY 2 STAND
 
-Korean mobile app (Expo) that tells a standing Seoul subway rider which way they will sway before an upcoming curve, with honest labeling of live, estimated, fixture and simulated data.
+Korean mobile app (Expo) that tells a standing Seoul subway rider which way they will sway before an upcoming curve, with honest labeling of live estimates, cached data, simulation and failure states (missing key, quota, offline).
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- `pnpm --filter @workspace/api-server run dev` — run the API server (port 8080, routed at `/api`)
+- `pnpm --filter @workspace/sub-way-stand run dev` — Expo (web preview + Expo Go QR); `/ride?sim=1` opens the simulation directly
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/sub-way-stand test` — mobile unit tests (Node built-in runner over `artifacts/sub-way-stand/tests/**/*.test.ts`)
-- Required env (API): `SEOUL_SUBWAY_API_KEY` — without it `/api/subway/trains` returns `status: missing_key`
+- `pnpm --filter @workspace/sub-way-stand test` — mobile unit + integration tests (Node built-in runner over `artifacts/sub-way-stand/tests/**/*.test.{ts,mts}`)
+- `pnpm --filter @workspace/api-server test` — proxy tests + pinned response fixtures; `UPDATE_FIXTURES=1 …` regenerates `artifacts/api-server/tests/fixtures/*.json` after an intentional contract change
+- Required env (API): `SEOUL_SUBWAY_API_KEY` — without it `/api/subway/trains` returns `status: missing_key`. Optional `SEOUL_SUBWAY_API_BASE`: HTTPS relay for the provider (plain-HTTP values are ignored)
 - Mobile feature flags (all default ON): `EXPO_PUBLIC_FLAG_LIVE_TRAINS`, `EXPO_PUBLIC_FLAG_PHYSICS_FORECAST`, `EXPO_PUBLIC_FLAG_VOICE_GUIDANCE`, `EXPO_PUBLIC_FLAG_HAPTICS`, `EXPO_PUBLIC_FLAG_SIMULATION_FALLBACK` — set to `0` to turn off
 
 ## Stack
@@ -30,6 +32,8 @@ Korean mobile app (Expo) that tells a standing Seoul subway rider which way they
   - `config/flags.ts` — feature flags, required off-behaviour, app config
   - `session/RideSession.tsx` — current `RideSelection`
   - `services/*.ts` — implementations of the contract signatures; screens import only these
+  - Pure, Node-testable logic: `services/trainFeed.ts` (API → candidates/feed), `data/line2.ts` + `data/routeGeometry.ts` (Line 2 loop, approximate curves, segment lookup), `lib/forecastEngine.ts` (live forecast), `lib/simulationRide.ts` (simulation), `lib/guidanceRules.ts` (speech/haptic decisions), `components/uiModel.ts` (labels)
+  - `docs/DEMO.md` — 2-minute judge script; `README.md` — product, data-honesty and limitation notes
 
 ## File ownership (parallel tasks — do not edit files you don't own)
 
@@ -53,10 +57,13 @@ Korean mobile app (Expo) that tells a standing Seoul subway rider which way they
 - Screens depend only on `contracts/` signatures via `services/*`; each service started as a labeled stub so tasks can swap implementations without touching screens.
 - The live feed is station-level only (no speed/position), so live forecasts are estimates with ranges and must suppress (with a reason) rather than guess.
 - Flags default ON; turning one off must degrade safely (simulation, muted, or suppressed), never crash.
+- Live sway direction is only given from verified (`curated`) curves. Bundled Line 2 curves are `station-geometry-approx`, so every live ride currently holds with `low-confidence` (확신이 낮아 안내 보류). This is intended until surveyed geometry exists; integration tests cover the verified path with a test-only curated variant.
+- One shared payload for the contract: the API test pins schema-validated responses as JSON, and the mobile integration test reads those files and runs mapping → segment → forecast → guidance.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- **열차 선택:** live Line 2 trains (station-level Seoul feed via our proxy) with freshness, direction filter and station search; banner shows 실시간 / 캐시 / 키 없음 / 호출 한도 / 연결 불가. **시뮬레이션으로 체험** is always one tap away (unless its flag is off).
+- **탑승 안내:** per-second forecast (sway side, entry window, confidence) with an explanation, a route strip of the current/next segment, and Korean voice + haptic cues (pre-warning ≈10 s before entry, then a "now" cue). Suppressed while stopped, stale, lost, uncertain or unverified. Simulation is a looping virtual ride on Line 2 신촌→홍대입구 and every cue starts with "시뮬레이션 안내:".
 
 ## User preferences
 
@@ -70,7 +77,10 @@ _Describe the high-level user-facing capabilities of this app once they exist._
 
 ## Gotchas
 
-- **Open security issue (backend/data owner):** the live proxy (`artifacts/api-server/src/lib/seoulSubway.ts`) calls `http://swopenapi.seoul.go.kr/...` with `SEOUL_SUBWAY_API_KEY` in the URL path, so the key would travel in plaintext. Move to a TLS upstream (or HTTPS relay) and add a test that rejects plaintext bases before setting the key. Note: `https://swopenapi.seoul.go.kr` timed out from this environment on 2026-10-14.
+- **Upstream is plain HTTP by default:** the official provider only answers on `http://swopenapi.seoul.go.kr` (its HTTPS host timed out from Replit on 2026-10-14), so the key travels unencrypted on the server→Seoul hop. Set `SEOUL_SUBWAY_API_BASE` to an HTTPS relay to avoid it.
+- API tests can't import `@workspace/api-zod` by package name under plain Node (its index re-exports extensionless paths); import `lib/api-zod/src/generated/api.ts` directly.
+- Simulation timing (from `lib/simulationRide.ts`): 8 s dwell, pre-warning ≈49 s, now cue ≈59 s, lap ≈113 s. Keep `docs/DEMO.md` in step if the profile changes.
+- `EXPO_PUBLIC_FLAG_*` are inlined when Metro bundles; restart Expo after changing them.
 
 - Mobile tests run under plain Node (type stripping): import sources by relative path **with `.ts`**, use only `import type` from `@/contracts`; `@/` value imports and React Native modules don't resolve there. Keep testable logic in pure modules.
 - Mobile uses TypeScript 6, whose default `types` is `[]`; `@types/node` is enabled explicitly in its tsconfig for `node:test`.

@@ -77,7 +77,10 @@ export default function TrainSelectScreen() {
         <Text style={[styles.tagline, { color: c.foreground }]}>{'곡선 전에, 어느 쪽으로\n쏠릴지 미리 알려드려요'}</Text>
       </View>
 
-      <FeedBanner feed={feed} liveEnabled={FLAGS.liveTrains} loading={isLoading} now={now} onRetry={refresh} />
+      {/* With live and simulation both off the banner would claim "시뮬레이션 모드"; the empty state explains instead. */}
+      {FLAGS.liveTrains || showSim ? (
+        <FeedBanner feed={feed} liveEnabled={FLAGS.liveTrains} loading={isLoading} now={now} onRetry={refresh} />
+      ) : null}
 
       <View style={styles.group}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
@@ -165,7 +168,13 @@ export default function TrainSelectScreen() {
       );
     }
     if (!FLAGS.liveTrains) {
-      return <EmptyState icon="cpu" title="실시간 열차 기능이 꺼져 있어요" body="아래 시뮬레이션으로 쏠림 안내를 체험할 수 있어요." />;
+      return (
+        <EmptyState
+          icon="cpu"
+          title="실시간 열차 기능이 꺼져 있어요"
+          body={showSim ? '아래 시뮬레이션으로 쏠림 안내를 체험할 수 있어요.' : '시뮬레이션도 꺼져 있어 지금은 체험할 수 있는 안내가 없어요.'}
+        />
+      );
     }
     if (banner.kind === 'empty') {
       return (

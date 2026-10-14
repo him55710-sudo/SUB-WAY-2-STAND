@@ -27,9 +27,3 @@ export const ROUTES: Readonly<Record<number, RouteData>> = {
 export const ROUTE_ALIASES: Readonly<Record<number, Readonly<Record<string, string>>>> = {
   2: LINE2_ALIASES,
 };
-
-/**
- * @deprecated Kept so branches written against the skeleton still compile.
- * Not fixture data any more; use `getRoute` from services/trains.
- */
-export const FIXTURE_ROUTES = ROUTES;

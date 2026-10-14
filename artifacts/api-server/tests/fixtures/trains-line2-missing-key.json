@@ -1,0 +1,10 @@
+{
+  "status": "missing_key",
+  "message": "서버에 SEOUL_SUBWAY_API_KEY가 설정되지 않았습니다.",
+  "trains": [],
+  "fetchedAt": "2026-10-14T05:00:00.000Z",
+  "cached": false,
+  "coverage": "서울 열린데이터광장 지하철 실시간 열차 위치정보(realtimePosition) · 1–9호선 · 역 단위 관측 · 좌표·속도·곡선 진입 시각 미제공",
+  "callsRemaining": 1000,
+  "totalOnLine": 0
+}
