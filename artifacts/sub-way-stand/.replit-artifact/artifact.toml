@@ -1,0 +1,24 @@
+kind = "mobile"
+previewPath = "/"
+title = "SUB WAY 2 STAND"
+description = "Korean native subway passenger companion with live train selection and an explicitly synthetic lateral-motion physics demonstration."
+version = "1.0.0"
+id = "artifacts/sub-way-stand"
+router = "expo-domain"
+
+[[services]]
+name = "expo"
+ensurePreviewReachable = "/status"
+paths = [ "/" ]
+localPort = 19498
+
+[services.development]
+run = "pnpm --filter @workspace/sub-way-stand run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/sub-way-stand", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/sub-way-stand", "run", "serve" ]
+
+[services.env]
+PORT = "19498"
+BASE_PATH = "/"

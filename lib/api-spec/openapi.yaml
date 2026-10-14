@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: subway
+    description: Station-level Seoul subway observations (secure proxy)
 paths:
   /healthz:
     get:
@@ -24,6 +26,35 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /subway/trains:
+    get:
+      operationId: getSubwayTrains
+      tags: [subway]
+      summary: Station-level Seoul train observations; never a motion forecast
+      description: >
+        Proxies the Seoul Open Data Plaza realtimePosition API with server-side
+        caching and a daily quota guard. The API key never leaves the server.
+        Observations are station-level only (no coordinates, speed, or curve timing).
+      parameters:
+        - name: line
+          in: query
+          required: true
+          schema: { type: integer, minimum: 1, maximum: 9 }
+        - name: direction
+          in: query
+          required: false
+          schema: { type: string, enum: ["0", "1"] }
+        - name: station
+          in: query
+          required: false
+          schema: { type: string, maxLength: 40 }
+      responses:
+        "200":
+          description: Observations or an explicit unavailable state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrainResponse"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +64,33 @@ components:
           type: string
       required:
         - status
-
+    Train:
+      type: object
+      required: [id, line, station, direction, directionCode, destination, state, stateCode, observedAt, fresh, express, lastTrain]
+      properties:
+        id: { type: string }
+        line: { type: integer }
+        station: { type: string }
+        direction: { type: string }
+        directionCode: { type: string, enum: ["0", "1"] }
+        destination: { type: string }
+        state: { type: string }
+        stateCode: { type: string, enum: ["0", "1", "2", "3", "unknown"] }
+        observedAt: { type: string }
+        fresh: { type: boolean }
+        express: { type: boolean }
+        lastTrain: { type: boolean }
+    TrainResponse:
+      type: object
+      required: [status, message, trains, fetchedAt, cached, coverage, callsRemaining, totalOnLine]
+      properties:
+        status: { type: string, enum: [live, degraded, missing_key, unavailable, quota, empty] }
+        message: { type: string }
+        trains:
+          type: array
+          items: { $ref: "#/components/schemas/Train" }
+        fetchedAt: { type: string }
+        cached: { type: boolean }
+        coverage: { type: string }
+        callsRemaining: { type: integer }
+        totalOnLine: { type: integer }
