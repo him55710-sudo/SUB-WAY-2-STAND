@@ -1,106 +1,104 @@
 /**
- * Forecast service — STUB. Owner: physics task.
+ * Forecast service. Owner: physics task.
  *
- * - simulation selection: runs lib/physics syntheticFrame on the invented
- *   SYN-A track, labeled source "simulation".
- * - live selection: always suppressed ("not-implemented") until the physics
- *   task wires real route + train data. Never presented as live.
+ * Recomputes every `APP_CONFIG.forecastTickMs` (1 s):
+ * - live selection: newest observation of the tracked train (trains service)
+ *   → lib/forecastEngine, source "live-estimate". A newer observation
+ *   restarts the estimate; older out-of-order ones are ignored.
+ * - simulation selection: deterministic simulated ride → lib/simulationRide,
+ *   source "simulation".
+ * Never throws: any error becomes a suppressed forecast.
  */
 import { useEffect, useState } from 'react';
 import { APP_CONFIG, FLAGS } from '@/config/flags';
-import type { CurveFeature, Forecast, RideSelection, SuppressReason, UseForecast } from '@/contracts';
-import { REASON_LABEL, SYN_A, SYN_PARAMS, syntheticFrame } from '@/lib/physics';
-import type { Curve, Side } from '@/lib/physics';
+import type { RideSelection, TrainCandidate, UseForecast } from '@/contracts';
+import {
+  computeLiveForecast,
+  newerObservation,
+  safeForecast,
+  suppressedForecast,
+} from '@/lib/forecastEngine';
+import { simulateForecast } from '@/lib/simulationRide';
+import { getSimulationRide } from '@/services/simulation';
+import { findSegment, getRoute, useTrackedTrain } from '@/services/trains';
 
-function toCurveFeature(c: Curve): CurveFeature {
-  return {
-    id: `${SYN_A.id}-${c.id}`,
-    startOffsetM: c.start,
-    lengthM: c.end - c.start,
-    radiusM: c.radius,
-    turn: c.turn,
-    source: 'synthetic',
-    confidence: 'low',
-  };
-}
-
-const toSway = (s: Side): Forecast['sway'] => s;
-
-function suppressed(
-  selection: RideSelection | null,
-  reason: SuppressReason,
-  explanationKo: string[],
-): Forecast {
-  return {
-    state: 'suppressed',
-    source: selection?.kind === 'simulation' ? 'simulation' : 'live-estimate',
-    segment: null,
-    positionM: null,
-    targetCurve: null,
-    sway: 'none',
-    etaWindowS: null,
-    lateralAccelMs2: null,
-    confidence: 'unavailable',
-    suppressReason: reason,
-    explanationKo,
-    computedAt: new Date().toISOString(),
-  };
-}
-
-function simulate(selection: RideSelection, elapsedS: number): Forecast {
-  const frame = syntheticFrame(elapsedS);
-  const fc = frame.forecast;
-  const curve = frame.upcoming && !frame.upcoming.inside ? frame.upcoming.curve : null;
-  const u = SYN_PARAMS.positionUncertaintyM;
-  if (fc.suppressed || !fc.window || !fc.accel || !curve) {
-    const why = fc.reasons.map((r) => REASON_LABEL[r]);
-    return {
-      ...suppressed(selection, curve ? 'low-confidence' : 'no-curve-ahead', [
-        '[시뮬레이션] 가상 선로 — 실제 열차와 무관합니다.',
-        ...(why.length ? why : ['곡선 구간을 통과 중입니다.']),
-      ]),
-      positionM: { min: Math.max(0, frame.s - u), max: frame.s + u },
-    };
-  }
-  return {
-    state: 'active',
-    source: 'simulation',
-    segment: null,
-    positionM: { min: Math.max(0, frame.s - u), max: frame.s + u },
-    targetCurve: toCurveFeature(curve),
-    sway: toSway(fc.sway),
-    etaWindowS: { min: fc.window[0], max: fc.window[1] },
-    lateralAccelMs2: { min: fc.accel[0], max: fc.accel[1] },
-    confidence: fc.confidence ?? 'unavailable',
-    suppressReason: null,
-    explanationKo: [
-      '[시뮬레이션] 가상 선로 SYN-A — 실제 열차와 무관합니다.',
-      `반경 ${Math.round(curve.radius)}m ${curve.turn === 'left' ? '좌' : '우'}곡선, 속도 ${SYN_PARAMS.speedMin}–${SYN_PARAMS.speedMax} m/s 가정.`,
-      `${curve.turn === 'left' ? '좌' : '우'}회전 시 승객은 ${fc.sway === 'right' ? '오른쪽' : '왼쪽'}으로 쏠립니다.`,
-    ],
-    computedAt: new Date().toISOString(),
-  };
-}
+type Latest = { selection: RideSelection | null; observation: TrainCandidate | null };
 
 export const useForecast: UseForecast = (selection) => {
-  const [elapsedS, setElapsedS] = useState(0);
+  const live = selection?.kind === 'live' ? selection : null;
+  const tracked = useTrackedTrain(live?.line ?? 0, live?.trainId ?? null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [latest, setLatest] = useState<Latest>({ selection: null, observation: null });
 
   useEffect(() => {
-    setElapsedS(0);
+    setNowMs(Date.now());
     if (!selection) return;
-    const id = setInterval(() => setElapsedS((s) => s + 1), APP_CONFIG.forecastTickMs);
+    const id = setInterval(() => setNowMs(Date.now()), APP_CONFIG.forecastTickMs);
     return () => clearInterval(id);
   }, [selection]);
 
-  if (!selection) return suppressed(null, 'no-selection', ['선택된 열차가 없습니다.']);
+  // Newest observation for the current selection.
+  const stored = latest.selection === selection ? latest.observation : null;
+  const fromFeed =
+    live && tracked.train && tracked.train.id === live.trainId && tracked.train.line === live.line
+      ? tracked.train
+      : null;
+  const observation = live ? newerObservation(newerObservation(live.initial, stored), fromFeed) : null;
+
+  useEffect(() => {
+    if (observation !== stored) setLatest({ selection, observation });
+  }, [observation, stored, selection]);
+
+  if (!selection) {
+    return suppressedForecast({
+      source: 'live-estimate',
+      reason: 'no-selection',
+      lines: ['선택된 열차가 없습니다.'],
+      nowMs,
+    });
+  }
+  const source = selection.kind === 'simulation' ? 'simulation' : 'live-estimate';
   if (!FLAGS.physicsForecast) {
-    return suppressed(selection, 'flag-disabled', ['흔들림 예측 기능이 꺼져 있습니다.']);
+    return suppressedForecast({
+      source,
+      reason: 'flag-disabled',
+      lines: ['흔들림 예측 기능이 꺼져 있습니다.'],
+      nowMs,
+    });
   }
-  if (selection.kind === 'live') {
-    return suppressed(selection, 'not-implemented', [
-      '[스텁] 실시간 예측은 아직 연결되지 않았습니다.',
-      '예측을 표시하지 않습니다.',
-    ]);
+
+  if (selection.kind === 'simulation') {
+    return safeForecast('simulation', nowMs, () => {
+      const ride = getSimulationRide(selection.scenarioId);
+      if (!ride) {
+        return suppressedForecast({
+          source: 'simulation',
+          reason: 'invalid-input',
+          lines: ['[시뮬레이션] 알 수 없는 시나리오입니다.'],
+          nowMs,
+        });
+      }
+      const startMs = Date.parse(selection.selectedAt);
+      const elapsedS = Number.isFinite(startMs) ? Math.max(0, (nowMs - startMs) / 1000) : 0;
+      return simulateForecast(ride, elapsedS, nowMs);
+    });
   }
-  return simulate(selection, elapsedS);
+
+  return safeForecast('live-estimate', nowMs, () => {
+    if (!observation) {
+      return suppressedForecast({
+        source: 'live-estimate',
+        reason: tracked.isLoading ? 'loading' : 'feed-unavailable',
+        lines: [tracked.isLoading ? '열차 정보를 불러오는 중입니다.' : '열차 관측 정보를 받을 수 없습니다.'],
+        nowMs,
+      });
+    }
+    return computeLiveForecast({
+      train: observation,
+      nowMs,
+      route: getRoute(selection.line),
+      findSegment,
+      lost: tracked.lost,
+    });
+  });
 };

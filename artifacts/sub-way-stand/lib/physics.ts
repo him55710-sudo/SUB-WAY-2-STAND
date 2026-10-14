@@ -67,6 +67,76 @@ export function turnSide(curvature: number): Side {
   return "none";
 }
 
+/* ------------------------------------------------------------------ */
+/* Route-data adapters + acceleration band (used by the forecast engine) */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Peak lateral acceleration below which a passenger barely notices the sway
+ * (m/s²). Curves whose upper bound stays below this are not announced.
+ */
+export const COMFORT_THRESHOLD_MS2 = 0.15;
+
+export type TurnSide = "left" | "right";
+
+/** Signed travel-frame curvature from route data (κ > 0 = left curve). */
+export function signedCurvature(radiusM: number, turn: TurnSide): number {
+  if (!Number.isFinite(radiusM) || radiusM <= 0) throw new RangeError("invalid radius");
+  return turn === "left" ? 1 / radiusM : -1 / radiusM;
+}
+
+/**
+ * Route data stores cant as "positive = banked toward the curve inside";
+ * this module uses "positive = banked toward the left".
+ */
+export function signedCant(cantRad: number | undefined, turn: TurnSide): number | undefined {
+  if (cantRad === undefined) return undefined;
+  return noNegZero(turn === "left" ? cantRad : -cantRad);
+}
+
+/** Without cant the passenger always leans away from the turn. */
+export function passengerSway(turn: TurnSide): TurnSide {
+  return turn === "left" ? "right" : "left";
+}
+
+export const msToKmh = (speed: number) => speed * 3.6;
+
+export type AccelBand = {
+  /** Magnitude range over the speed band, m/s². `min` is 0 when the sign flips. */
+  min: number;
+  max: number;
+  /** Passenger sway direction, `none` when ambiguous or negligible. */
+  sway: Side;
+  /** True when cant makes the direction flip inside the speed band. */
+  ambiguous: boolean;
+};
+
+/**
+ * Lateral acceleration over a speed band [vLo, vHi] on one curve.
+ * a(v) = v²κ − g·sinθ is monotonic in v ≥ 0, so the band endpoints bound it.
+ */
+export function lateralAccelBand(
+  speedLo: number,
+  speedHi: number,
+  curvature: number,
+  cantRad?: number,
+): AccelBand {
+  if (!allFinite(speedLo, speedHi) || speedLo < 0 || speedHi < speedLo) {
+    throw new RangeError("invalid speed band");
+  }
+  const aLo = lateralAcceleration(speedLo, curvature, cantRad);
+  const aHi = lateralAcceleration(speedHi, curvature, cantRad);
+  const crosses = (aLo < 0 && aHi > 0) || (aLo > 0 && aHi < 0);
+  const ambiguous = crosses && Math.min(Math.abs(aLo), Math.abs(aHi)) >= SWAY_THRESHOLD;
+  const dominant = Math.abs(aHi) >= Math.abs(aLo) ? aHi : aLo;
+  return {
+    min: crosses ? 0 : Math.min(Math.abs(aLo), Math.abs(aHi)),
+    max: Math.max(Math.abs(aLo), Math.abs(aHi)),
+    sway: ambiguous ? "none" : swayDirection(dominant),
+    ambiguous,
+  };
+}
+
 /** Rate of change of lateral acceleration while entering a spiral: j = v³ · dκ/ds (m/s³). */
 export function transitionJerk(speed: number, dKappaDs: number): number {
   if (!allFinite(speed, dKappaDs) || speed < 0) throw new RangeError("invalid jerk inputs");
@@ -128,7 +198,9 @@ function suppressedResult(reasons: SuppressReason[]): Forecast {
 }
 
 /**
- * Conservative forecast. Any doubt → suppressed with explicit reasons.
+ * Legacy constant-speed forecast used by the SYN-A track demo and the alert
+ * policy. The app's contract forecast lives in lib/forecastEngine.ts.
+ * Conservative: any doubt → suppressed with explicit reasons.
  * Time window = [dMin / vMax, dMax / vMin].
  */
 export function forecast(input: ForecastInput): Forecast {

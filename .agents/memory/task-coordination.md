@@ -14,3 +14,9 @@ description: How main-agent work interacts with the parallel project tasks (#1 s
 
 - Main already holds pre-built, tested modules from before the task split (physics engine, alert policy, announcer,
   freshness, UI components, server proxy). Task agents should reuse them rather than re-create them.
+
+- Mobile `pnpm test` runs both `tests/**/*.test.ts` and `tests/**/*.test.mts` (Node runner, type stripping; a bare
+  directory arg fails). `lib/` files may value-import each other with relative `./x.ts`
+  paths (Node type-stripping and Metro both resolve them); never value-import `@/…` or React Native from `lib/`.
+- A fresh task fork may lack installed devDeps (e.g. `@types/node` → typecheck TS2688). `pnpm install --frozen-lockfile`
+  fixes it without touching the lockfile. Typed-route errors on `/ride` mean the Expo workflow needs a restart.
