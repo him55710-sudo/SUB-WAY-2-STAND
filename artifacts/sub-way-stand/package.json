@@ -8,7 +8,7 @@
     "build": "node scripts/build.js",
     "serve": "node server/serve.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test --disable-warning=MODULE_TYPELESS_PACKAGE_JSON \"tests/**/*.test.ts\""
+    "test": "node --test --disable-warning=MODULE_TYPELESS_PACKAGE_JSON \"tests/**/*.test.ts\" \"tests/**/*.test.mts\""
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

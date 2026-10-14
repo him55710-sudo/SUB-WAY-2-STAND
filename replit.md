@@ -40,6 +40,9 @@ Korean mobile app (Expo) that tells a standing Seoul subway rider which way they
 | Physics (curve sway forecast) | `lib/physics.ts`, `services/forecast.ts`, `services/simulation.ts`, any new `lib/forecast*`/`lib/simulation*` |
 | UI (screens, map, motion) | `screens/**`, `components/**`, `constants/colors.ts`, `hooks/useColors.ts` (theme) |
 | Voice/docs (Korean voice, haptics) | `services/guidance.ts`, `README.md`, demo docs (`docs/**`) |
+| Integrator — design system | `design/**` (Motion OS spec + tokens). Read-only for other tasks. |
+
+- **Motion OS design pass:** the user confirmed **Motion OS — Dark Edition** (`design/motion-os.md`, tokens in `design/tokens.ts`) after the UI task started. It gets applied to `screens/**`, `components/**` and the theme files only **after the UI task merges**, as one pass by the main agent. If final integration has already started by then, it waits until that merges. Don't apply it piecemeal while another task owns those files.
 
 - Tests: each owner adds its own `tests/<area>.test.ts`; don't edit another owner's test file.
 - Need a contract or dependency change? Don't edit integrator files — note it in your task report.
@@ -57,7 +60,13 @@ _Describe the high-level user-facing capabilities of this app once they exist._
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- **Design (confirmed 2026-10-14): Motion OS — Dark Edition.** Deep black / dark navy background, restrained neon-lime brand point, bold large type, very clear future sway direction and time. Use Wallet/Nothing/Linear as references only; don't copy them.
+  - Seoul line colours are for line identity only.
+  - Never show risk by colour alone.
+  - No unnecessary cards, charts, shadows, gradients or menus. Only the two screens, Select Train and Motion Live.
+  - Calm by default. Direction and a short motion effect stand out only for a trustworthy forecast.
+  - Live, simulation and uncertain/held states must be unmistakable.
+- **Priority:** a runnable native app and verification come before design polish. Design work must not collide with in-flight feature tasks.
 
 ## Gotchas
 

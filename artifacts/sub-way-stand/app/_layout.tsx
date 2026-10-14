@@ -14,6 +14,8 @@ import {
 import { setBaseUrl } from '@workspace/api-client-react';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import { StatusBar } from 'expo-status-bar';
+import { color } from '@/design/tokens';
 import { RideSessionProvider } from '@/session/RideSession';
 
 // Expo bundles run outside the web proxy: point the API client at the dev
@@ -29,7 +31,17 @@ const queryClient = new QueryClient();
 
 function RootLayoutNav() {
   return (
-    <Stack screenOptions={{ headerBackTitle: '뒤로' }}>
+    <Stack
+      screenOptions={{
+        headerBackTitle: '뒤로',
+        // Motion OS — Dark Edition: the native header blends into the ink background.
+        headerStyle: { backgroundColor: color.ink },
+        headerTintColor: color.text,
+        headerTitleStyle: { fontWeight: '700', color: color.text },
+        headerShadowVisible: false,
+        contentStyle: { backgroundColor: color.ink },
+      }}
+    >
       <Stack.Screen name="index" options={{ title: '열차 선택' }} />
       <Stack.Screen name="ride" options={{ title: '탑승 안내' }} />
     </Stack>
@@ -56,9 +68,10 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
-          <GestureHandlerRootView>
+          <GestureHandlerRootView style={{ flex: 1, backgroundColor: color.ink }}>
             <KeyboardProvider>
               <RideSessionProvider>
+                <StatusBar style="light" />
                 <RootLayoutNav />
               </RideSessionProvider>
             </KeyboardProvider>
