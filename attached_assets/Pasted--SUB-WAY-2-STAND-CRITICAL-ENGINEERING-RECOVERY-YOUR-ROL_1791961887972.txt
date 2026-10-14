@@ -1,0 +1,313 @@
+# SUB WAY 2 STAND — CRITICAL ENGINEERING RECOVERY
+
+## YOUR ROLE
+
+You are the principal engineer, railway dynamics researcher, and technical lead responsible for delivering a functioning real-world subway motion prediction system.
+
+You have full responsibility for inspecting the existing repository, fixing architectural problems, implementing missing functionality, integrating real datasets, and validating the result.
+
+**Do not behave as a product planner. Act as an engineer who must ship working software.**
+
+The current project is a React Native + Expo mobile application with a backend that accesses Seoul's real-time subway position API.
+
+## THE CORE FAILURE
+
+The application currently contains two disconnected capabilities:
+
+1. A live subway train tracking system.
+2. A physics simulation running on synthetic railway geometry.
+
+This is NOT sufficient.
+
+The product must connect actual subway operations to actual railway geometry and calculate upcoming motion.
+
+**The primary deliverable is a functioning end-to-end prediction pipeline, not another simulation, architecture document, or UI mockup.**
+
+## PHASE 0 — INSPECT AND PRESERVE
+
+Immediately inspect the existing repository.
+
+Identify:
+
+- Current mobile app structure and running screens
+- Seoul subway API integration
+- Train-state estimation implementation
+- Existing physics calculations
+- Existing tests and data models
+- Existing parallel tasks and possible file conflicts
+
+Preserve working functionality.
+
+Do not rewrite the entire application.
+
+Do not spend more than 10 minutes planning.
+
+If the repository already contains useful code, reuse it.
+
+## PHASE 1 — REAL RAILWAY GEOMETRY
+
+This is the highest-priority technical task.
+
+Find actual geospatial railway track alignment data for Seoul subway lines.
+
+Investigate:
+
+- OpenStreetMap railway ways
+- OpenRailwayMap
+- Official Korean railway GIS datasets
+- Public railway infrastructure data
+- Other legally reusable geospatial datasets
+
+Download and preprocess the best available track centerline data.
+
+Requirements:
+
+1. Identify real track centerlines rather than schematic subway maps.
+2. Convert latitude and longitude into a metric projected coordinate system.
+3. Reconstruct ordered track segments.
+4. Calculate signed curvature from local track geometry.
+5. Detect curve entry, curve exit, and curve direction.
+6. Estimate curvature uncertainty caused by sampling and map accuracy.
+7. Associate track segments with subway lines and station order.
+8. Preserve data provenance and licensing information.
+
+**Do not derive railway curvature from straight lines connecting stations.**
+
+Prioritize getting one actual segment working correctly, then expand to other available lines using the same processing pipeline.
+
+Do not stop after finding URLs. Download the data, parse it, inspect it, and connect it to the application.
+
+## PHASE 2 — TRAIN LOCALIZATION AND VELOCITY ESTIMATION
+
+Use the existing Seoul real-time subway API.
+
+Inputs may include:
+
+- Train identifier
+- Subway line
+- Travel direction
+- Last confirmed station
+- Arrival/departure state
+- Observation timestamp
+- Historical travel time
+- Track distance
+
+The API does not directly expose exact train coordinates or instantaneous velocity.
+
+Therefore implement a bounded train-state estimator.
+
+Use physically plausible acceleration, cruising, braking, and station dwell models.
+
+Estimate:
+
+- Current track-distance interval
+- Current velocity interval
+- Likely operating state
+- Position uncertainty
+- Time until upcoming track features
+
+Do not hardcode one fixed train speed and present it as real.
+
+Use an appropriate probabilistic estimator if it materially improves performance, but avoid unnecessary mathematical complexity.
+
+**A simpler calibrated model is better than an unvalidated complex filter.**
+
+## PHASE 3 — SMARTPHONE SENSOR INTEGRATION
+
+Implement actual smartphone motion sensing using Expo-supported APIs.
+
+Use:
+
+- Accelerometer
+- Gyroscope
+- Device orientation where available
+
+Implement basic gravity compensation, filtering, and sensor-quality assessment.
+
+Create a train-motion state detector capable of identifying candidate:
+
+- Moving
+- Decelerating
+- Stationary
+- Accelerating
+
+Account for the fact that users may hold, rotate, or move their phones.
+
+Do not assume that phone acceleration equals train acceleration.
+
+Use confidence thresholds and hysteresis to avoid rapid false state transitions.
+
+When an unexpected stop is detected with sufficient confidence:
+
+- Suspend the existing curve-entry countdown.
+- Stop pending voice alerts.
+- Mark train location and speed estimates as uncertain.
+- Resume prediction only after sufficient evidence of renewed motion.
+
+Distinguish detecting an ongoing stop from predicting it in advance.
+
+## PHASE 4 — PHYSICS-BASED MOTION FORECASTING
+
+Connect the following pipeline:
+
+**Live Train State + Real Track Centerline + Sensor Observations → State Estimation → Physics Engine → Upcoming Motion Forecast → Voice Alert**
+
+Calculate:
+
+- Signed track curvature
+- Lateral acceleration
+- Longitudinal acceleration
+- Lateral jerk
+- Curve-entry time window
+- Direction of passenger sway
+- Prediction uncertainty
+
+Include cant compensation only when actual or justified cant data exists.
+
+Do not invent train suspension parameters, vehicle masses, or precise rail irregularity profiles.
+
+Vehicle-specific dynamics should be modular and optional.
+
+Implement physically consistent sign conventions and unit tests.
+
+For unknown parameters, propagate uncertainty instead of silently assigning precise values.
+
+## PHASE 5 — IRREGULAR VIBRATION
+
+Investigate publicly available railway vibration datasets, including:
+
+- ETH Zurich Railway Precise Localization
+- MetroDataset
+- Smartphone-based train vibration datasets
+
+Determine whether these datasets contain location-aligned vibration events that can support future warning predictions.
+
+If segment-specific irregular vibration records are unavailable, do not claim that sudden jolts can be predicted.
+
+You may implement a clearly separated experimental vibration-pattern analysis module, but it must not compromise the primary curve prediction pipeline.
+
+**Do not substitute random vibration animations for actual prediction.**
+
+## PHASE 6 — REAL VALIDATION
+
+The model must be tested against measured data.
+
+Where available, use actual GNSS, IMU, and speed records.
+
+Use chronological separation between model fitting and evaluation.
+
+Measure:
+
+- Direction prediction accuracy
+- Acceleration MAE
+- Curve-entry timing error
+- Event precision and recall
+- False-warning rate
+- Forecast availability
+
+Compare against a simple baseline.
+
+Do not fabricate measurements or claim accuracy based only on unit tests.
+
+If Seoul-specific validation data is unavailable, state clearly that the model has been tested on foreign railway data and has not yet been validated on Seoul subway operations.
+
+## PHASE 7 — MOBILE APP INTEGRATION
+
+Keep the existing two-screen mobile experience.
+
+### Select Train
+
+Allow users to select a subway line, direction, station, and actual train.
+
+Use the existing live API.
+
+### Motion Live
+
+Show:
+
+- Current train and latest confirmed location
+- Estimated operating state
+- Upcoming curve event when reliable
+- Expected passenger sway direction
+- Estimated time window
+- Confidence/availability state
+- Short Korean voice warning
+
+If confidence is insufficient, display a clear prediction hold state.
+
+Do not falsely show simulated motion as live train motion.
+
+Keep the interface compatible with the agreed **Motion OS — Dark Edition** design direction.
+
+## PHASE 8 — AUTOMATED TESTING
+
+Implement and run tests covering:
+
+- Curvature sign and geometry processing
+- Speed squared relationship
+- Left/right passenger sway direction
+- Unit conversion
+- Stationary train handling
+- Unexpected stop and restart
+- Stale API responses
+- Speed uncertainty propagation
+- Alert cancellation
+- Invalid track geometry
+- Sensor movement contamination
+- Live API failure and fallback
+
+Run the application and confirm that the end-to-end workflow functions.
+
+Tests passing is necessary but does not establish real-world accuracy.
+
+## EXECUTION RULES
+
+1. Implement actual code. Do not stop at recommendations.
+2. Use available tools to download and process real data.
+3. Reuse the existing project and preserve working functionality.
+4. Avoid unnecessary features, dashboards, and refactoring.
+5. Keep real, estimated, measured, and simulated information explicitly separated.
+6. Prioritize a working vertical slice over theoretical completeness.
+7. Use parallel workers only when they can operate on independent files.
+8. Do not claim success without execution evidence.
+9. If blocked, explain the precise blocker and implement the best safe partial solution.
+10. Do not ask for approval for routine non-destructive implementation decisions.
+
+## DEFINITION OF DONE
+
+The task is not complete merely because the simulation works.
+
+A successful implementation must demonstrate:
+
+1. A real subway train is selected.
+2. Its current operating state is retrieved from the live API.
+3. The system associates the train with a real railway segment, with uncertainty explicitly represented.
+4. The physics engine uses real track curvature and bounded velocity estimates.
+5. A future motion event is calculated when sufficient evidence exists.
+6. The user receives an appropriate advance warning.
+7. Stale data, unexpected stops, and low confidence suppress unreliable alerts.
+8. The prediction pipeline is tested and its limitations documented.
+
+If any requirement cannot be met with available data, do not invent a result. Implement the maximum verified functionality and explicitly identify the remaining blocker.
+
+## TIME CONSTRAINT
+
+This is a three-hour hackathon.
+
+Work in the following order:
+
+**Priority 1:** Actual railway geometry integration.
+
+**Priority 2:** Live train-state and geometry connection.
+
+**Priority 3:** Train position/velocity estimation and uncertainty.
+
+**Priority 4:** Functional advance motion warning.
+
+**Priority 5:** Smartphone sensor stop/restart detection.
+
+**Priority 6:** Real-data validation and UI polish.
+
+Stop expanding the feature set.
+
+**START IMPLEMENTING NOW. THE OBJECTIVE IS A WORKING REAL-WORLD MOTION PREDICTION SYSTEM, NOT ANOTHER DEMONSTRATION OF A SYNTHETIC PHYSICS MODEL.**
