@@ -21,3 +21,7 @@ description: How main-agent work interacts with the parallel project tasks (#1 s
   paths (Node type-stripping and Metro both resolve them); never value-import `@/…` or React Native from `lib/`.
 - A fresh task fork may lack installed devDeps (e.g. `@types/node` → typecheck TS2688). `pnpm install --frozen-lockfile`
   fixes it without touching the lockfile. Typed-route errors on `/ride` mean the Expo workflow needs a restart.
+- `pnpm add` in this monorepo re-resolves unrelated peers (e.g. orval's typescript), churning the lockfile.
+  **How to apply:** keep only the new package's hunks in `pnpm-lock.yaml`, then confirm with `pnpm install --frozen-lockfile`.
+- Node's type stripping rejects TS-only runtime syntax in `lib/` (constructor parameter properties, enums, namespaces);
+  tsc accepts it, so only the Node test run catches it. Use plain fields.

@@ -2,3 +2,4 @@
 - [Seoul data sources](seoul-data-sources.md) — provider is HTTP-only, `sample` key, Nominatim works/Overpass doesn't, 내선/외선 semantics.
 - [Mobile UI verification](ui-verification.md) — `/ride?sim=1` screenshots, tester for live/degraded states (no strict timings), labeling rule.
 - [Forecast model decisions](forecast-model.md) — segment/position semantics, ETA {0,0}, verified-geometry gate for live, weak-curve reason.
+- [Motion sensing](motion-sensing.md) — phone sensor only holds live forecasts; hold release/contamination rules; thresholds uncalibrated.

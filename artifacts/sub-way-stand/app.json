@@ -15,7 +15,15 @@
     "web": {
       "favicon": "./assets/images/icon.png"
     },
-    "plugins": ["expo-router"],
+    "plugins": [
+      "expo-router",
+      [
+        "expo-sensors",
+        {
+          "motionPermission": "열차가 역 사이에서 이미 멈춰 섰는지 감지하기 위해 동작 센서를 사용합니다. 정차를 예측하지는 않습니다."
+        }
+      ]
+    ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true

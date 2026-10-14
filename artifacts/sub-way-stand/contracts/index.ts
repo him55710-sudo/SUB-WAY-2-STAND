@@ -278,3 +278,74 @@ export type UseForecast = (selection: RideSelection | null) => Forecast;
 
 /** services/guidance.ts */
 export type UseGuidance = (forecast: Forecast | null) => GuidanceState;
+
+// ---------------------------------------------------------------------------
+// Phone motion sensing (detects an ONGOING stop; never predicts one)
+// ---------------------------------------------------------------------------
+
+/**
+ * Train motion as inferred from the rider's phone.
+ * - `accelerating` / `decelerating` need a calibrated forward axis; without
+ *   one, sustained horizontal acceleration is reported as `speed-changing`
+ *   (which can also be lateral acceleration in a curve).
+ */
+export type TrainMotionState =
+  | 'stationary'
+  | 'moving'
+  | 'accelerating'
+  | 'decelerating'
+  | 'speed-changing'
+  | 'unknown';
+
+/**
+ * - `good`: clean window, decisions allowed.
+ * - `handling`: the phone is being picked up / rotated / carried; state is
+ *   frozen and confidence decays. No stop or restart decision is made.
+ * - `no-data`: warming up, sample gap or sensor silent.
+ */
+export type MotionSensorQuality = 'good' | 'handling' | 'no-data';
+
+/** Window features behind the current reading (for display / debugging). */
+export interface MotionFeatures {
+  /** Running-vibration RMS of gravity-compensated acceleration, m/s². */
+  vibrationRmsMs2: number;
+  /** Magnitude of the window-mean horizontal acceleration, m/s². */
+  sustainedHorizontalMs2: number;
+  /** RMS gyro rotation rate over the handling window, rad/s (0 without a gyro). */
+  rotationRateRadS: number;
+  /** Gravity-direction change over the tilt window, degrees. */
+  tiltChangeDeg: number;
+}
+
+export interface MotionReading {
+  state: TrainMotionState;
+  /** 0–1. Decays while the phone is handled or data is missing. */
+  confidence: number;
+  quality: MotionSensorQuality;
+  /** Epoch ms when the evidence for the current state began; null while `unknown`. */
+  stateSinceMs: number | null;
+  /** True when accelerating vs decelerating can be told apart. */
+  forwardAxisCalibrated: boolean;
+  features: MotionFeatures | null;
+}
+
+export type MotionSensorUnavailableReason =
+  | 'flag-disabled'
+  | 'disabled'
+  | 'web'
+  | 'no-sensor'
+  | 'permission-denied'
+  | 'error';
+
+export type MotionSensorState =
+  | { status: 'unavailable'; reason: MotionSensorUnavailableReason }
+  | { status: 'starting' }
+  | (MotionReading & {
+      status: 'active';
+      /** OS sensor-fusion gravity (device motion) or a low-pass estimate. */
+      gravitySource: 'device-motion' | 'low-pass';
+      updatedAtMs: number;
+    });
+
+/** services/motionSensor.ts — `enabled: false` keeps the sensors off (reason `disabled`). */
+export type UseMotionSensor = (options?: { enabled?: boolean }) => MotionSensorState;

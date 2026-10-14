@@ -285,7 +285,7 @@ test('simulation: Line 2 segment → dwell suppressed → countdown → prefixed
 // ---------------------------------------------------------------------------
 
 test('flags: default ON, "0"/"false" turn each off; voice flag off means unavailable', async () => {
-  const names = ['LIVE_TRAINS', 'PHYSICS_FORECAST', 'VOICE_GUIDANCE', 'HAPTICS', 'SIMULATION_FALLBACK'] as const;
+  const names = ['LIVE_TRAINS', 'PHYSICS_FORECAST', 'VOICE_GUIDANCE', 'HAPTICS', 'SIMULATION_FALLBACK', 'MOTION_SENSOR'] as const;
   const load = async (tag: string) => {
     // A query string forces a fresh module instance that re-reads process.env.
     const spec = `../config/flags.ts?${tag}`;
@@ -299,6 +299,7 @@ test('flags: default ON, "0"/"false" turn each off; voice flag off means unavail
   process.env.EXPO_PUBLIC_FLAG_VOICE_GUIDANCE = '0';
   process.env.EXPO_PUBLIC_FLAG_HAPTICS = '0';
   process.env.EXPO_PUBLIC_FLAG_SIMULATION_FALLBACK = '0';
+  process.env.EXPO_PUBLIC_FLAG_MOTION_SENSOR = '0';
   try {
     assert.ok(Object.values(await load('off')).every((v) => v === false));
   } finally {

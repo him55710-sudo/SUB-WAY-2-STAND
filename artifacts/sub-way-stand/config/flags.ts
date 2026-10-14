@@ -13,6 +13,9 @@
  * - voiceGuidance:      useGuidance reports available=false and never speaks.
  * - haptics:            no haptic feedback is fired.
  * - simulationFallback: the "시뮬레이션으로 체험" entry is hidden.
+ * - motionSensor:       useMotionSensor never subscribes to the phone's motion
+ *                       sensors and reports `unavailable` ("flag-disabled"),
+ *                       so the sensor gate passes every forecast through.
  */
 export interface FeatureFlags {
   liveTrains: boolean;
@@ -20,6 +23,7 @@ export interface FeatureFlags {
   voiceGuidance: boolean;
   haptics: boolean;
   simulationFallback: boolean;
+  motionSensor: boolean;
 }
 
 // Expo inlines EXPO_PUBLIC_* only for static `process.env.EXPO_PUBLIC_X` reads.
@@ -31,6 +35,7 @@ export const FLAGS: Readonly<FeatureFlags> = Object.freeze({
   voiceGuidance: !off(process.env.EXPO_PUBLIC_FLAG_VOICE_GUIDANCE),
   haptics: !off(process.env.EXPO_PUBLIC_FLAG_HAPTICS),
   simulationFallback: !off(process.env.EXPO_PUBLIC_FLAG_SIMULATION_FALLBACK),
+  motionSensor: !off(process.env.EXPO_PUBLIC_FLAG_MOTION_SENSOR),
 });
 
 export const APP_CONFIG = Object.freeze({
