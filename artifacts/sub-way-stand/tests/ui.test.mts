@@ -85,9 +85,10 @@ test('station search ignores spaces and a trailing 역', () => {
 });
 
 test('ETA phrase is rounded, ordered and never negative', () => {
-  assert.equal(etaPhrase({ min: 7.6, max: 13.6 }), '약 8–14초 후');
+  assert.equal(etaPhrase({ min: 7.6, max: 13.6 }), '약 7–14초 후');
   assert.equal(etaPhrase({ min: 14, max: 8 }), '약 8–14초 후');
-  assert.equal(etaPhrase({ min: 5.2, max: 4.8 }), '약 5초 후');
+  assert.equal(etaPhrase({ min: 5.2, max: 4.8 }), '약 4–6초 후');
+  assert.equal(etaPhrase({ min: 0.1, max: 0.4 }), '약 0–1초 후');
   assert.equal(etaPhrase({ min: -3, max: -1 }), '지금');
 });
 
@@ -96,7 +97,8 @@ test('ride phase: suppressed, approach, then now', () => {
   assert.equal(ridePhase({ ...base, state: 'suppressed', sway: 'none', etaWindowS: null }), 'suppressed');
   assert.equal(ridePhase({ ...base, sway: 'none', etaWindowS: { min: 5, max: 8 } }), 'suppressed');
   assert.equal(ridePhase({ ...base, etaWindowS: { min: 8, max: 14 } }), 'approach');
-  assert.equal(ridePhase({ ...base, etaWindowS: { min: 1, max: 4 } }), 'now');
+  assert.equal(ridePhase({ ...base, etaWindowS: { min: 1, max: 4 } }), 'approach');
+  assert.equal(ridePhase({ ...base, etaWindowS: { min: 0, max: 0 } }), 'now');
 });
 
 test('lean is proportional, signed by side and capped', () => {

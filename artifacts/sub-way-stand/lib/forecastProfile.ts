@@ -106,3 +106,8 @@ export function peakSpeedOver(pr: Profile, s0: number, s1: number): number {
   if (lo <= pr.length - pr.brakeDist && hi >= pr.accelDist) return pr.peak;
   return Math.max(speedAt(pr, lo), speedAt(pr, hi));
 }
+
+/** Lowest speed over the whole interval, including entry and braking at exit. */
+export function minSpeedOver(pr: Profile, s0: number, s1: number): number {
+  return Math.min(speedAt(pr, s0), speedAt(pr, s1));
+}

@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { Platform } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
@@ -20,8 +21,12 @@ import { RideSessionProvider } from '@/session/RideSession';
 
 // Expo bundles run outside the web proxy: point the API client at the dev
 // domain so `/api/subway/trains` resolves to the API server.
-if (process.env.EXPO_PUBLIC_DOMAIN) {
-  setBaseUrl(`https://${process.env.EXPO_PUBLIC_DOMAIN}`);
+const apiUrl = process.env.EXPO_PUBLIC_API_URL;
+if (apiUrl) {
+  setBaseUrl(apiUrl);
+} else if (Platform.OS !== 'web' && process.env.EXPO_PUBLIC_DOMAIN) {
+  const domain = process.env.EXPO_PUBLIC_DOMAIN;
+  setBaseUrl(/^https?:\/\//.test(domain) ? domain : `https://${domain}`);
 }
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
@@ -44,6 +49,7 @@ function RootLayoutNav() {
     >
       <Stack.Screen name="index" options={{ title: '열차 선택' }} />
       <Stack.Screen name="ride" options={{ title: '탑승 안내' }} />
+      <Stack.Screen name="evidence" options={{ title: '검증과 연구 근거' }} />
     </Stack>
   );
 }

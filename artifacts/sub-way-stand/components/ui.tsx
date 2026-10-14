@@ -33,7 +33,7 @@ export type Tone = 'live' | 'synthetic' | 'warn' | 'danger' | 'muted';
 export function useScreenInsets() {
   const insets = useSafeAreaInsets();
   const web = Platform.OS === 'web';
-  return { top: web ? 67 : insets.top, bottom: web ? 34 : insets.bottom };
+  return { top: web ? 28 : insets.top, bottom: web ? 20 : insets.bottom };
 }
 
 export function useTone(tone: Tone) {
@@ -197,14 +197,14 @@ export function TogglePill({
       style={({ pressed }) => [
         styles.toggle,
         {
-          backgroundColor: value ? c.primary : c.raised,
-          borderColor: value ? c.primary : c.border,
+          backgroundColor: value ? c.foreground : 'transparent',
+          borderColor: value ? c.foreground : c.border,
           opacity: pressed ? 0.8 : 1,
         },
       ]}
     >
-      <Feather name={icon} size={16} color={value ? c.primaryForeground : c.mutedForeground} />
-      <Text style={[styles.toggleText, { color: value ? c.primaryForeground : c.mutedForeground }]}>
+      <Feather name={icon} size={16} color={value ? c.background : c.mutedForeground} />
+      <Text style={[styles.toggleText, { color: value ? c.background : c.mutedForeground }]}>
         {label} {value ? '켜짐' : '꺼짐'}
       </Text>
     </Pressable>
@@ -319,6 +319,7 @@ export function DarkScreenChrome() {
       <StatusBar style="light" />
       <Stack.Screen
         options={{
+          headerShown: false,
           headerStyle: { backgroundColor: c.background },
           headerTintColor: c.foreground,
           headerShadowVisible: false,
@@ -364,14 +365,14 @@ export function Chip({
       style={({ pressed }) => [
         styles.chip,
         {
-          backgroundColor: selected ? fill : c.card,
+          backgroundColor: selected ? c.raised : 'transparent',
           borderColor: selected ? fill : c.border,
           opacity: pressed ? 0.8 : 1,
         },
       ]}
     >
       {leading}
-      <Text style={[styles.chipText, { color: selected ? (onColor ?? c.primaryForeground) : c.foreground }]}>
+      <Text style={[styles.chipText, { color: selected ? c.foreground : c.mutedForeground }]}>
         {label}
       </Text>
     </Pressable>
@@ -438,7 +439,7 @@ export function Skeleton({ width, height, radius = 8, style }: { width: number |
 
 const styles = StyleSheet.create({
   chip: {
-    minHeight: 40,
+    minHeight: 48,
     paddingHorizontal: 14,
     borderRadius: 999,
     borderWidth: 1,
@@ -448,7 +449,7 @@ const styles = StyleSheet.create({
   },
   chipText: { fontSize: 14, fontWeight: '700' },
   segmented: { flexDirection: 'row', borderWidth: 1, borderRadius: 12, padding: 3, gap: 3 },
-  segment: { flex: 1, minHeight: 42, borderRadius: 9, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  segment: { flex: 1, minHeight: 48, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   segmentText: { fontSize: 14, fontWeight: '700' },
   badge: {
     flexDirection: 'row',

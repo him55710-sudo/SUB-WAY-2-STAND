@@ -10,7 +10,7 @@
  */
 import type { CurveFeature, Forecast, NumericRange, RouteData, RouteSegment } from '@/contracts';
 import { SYN_A, findCurves, msToKmh, trackLength } from './physics.ts';
-import { makeProfile, peakSpeedOver, positionAt, speedAt, timeAt } from './forecastProfile.ts';
+import { makeProfile, minSpeedOver, peakSpeedOver, positionAt, speedAt, timeAt } from './forecastProfile.ts';
 import type { Profile, ProfileParams } from './forecastProfile.ts';
 import {
   CONFIDENCE_KO,
@@ -59,13 +59,14 @@ export type SimRide = {
   durationS: number;
 };
 
-/** Curved segment of the given route with the most curves (ties: both turn directions, then route order). */
+/** Prefer an actual mapped centerline; otherwise choose a segment with the most curves. */
 export function pickSimulationSegment(route: RouteData | null): {
   segment: RouteSegment;
   label: string;
   usesRouteData: boolean;
 } {
   const score = (s: RouteSegment) =>
+    (s.curves.every((c) => c.source === 'osm-centerline') ? 100 : 0) +
     s.curves.length + (new Set(s.curves.map((c) => c.turn)).size > 1 ? 0.5 : 0);
   let best: RouteSegment | null = null;
   for (const seg of route?.segments ?? []) {
@@ -135,11 +136,12 @@ export function simulateForecast(ride: SimRide, elapsedS: number, nowMs: number)
       const eta = timeAt(ride.profile, start) - tRun;
       const margin = U.etaBaseS + U.etaFrac * Math.max(0, eta);
       const vPeak = peakSpeedOver(ride.profile, start, end);
+      const vMin = minSpeedOver(ride.profile, start, end);
       cands.push({
         segment: seg,
         curve,
         etaS: eta <= 0 ? range(0, 0) : range(Math.max(0, eta - margin), eta + margin),
-        speedMs: range(Math.max(0, vPeak - U.speedMs), vPeak + U.speedMs),
+        speedMs: range(Math.max(0, vMin - U.speedMs), vPeak + U.speedMs),
         positionM,
         nextSegment: false,
       });

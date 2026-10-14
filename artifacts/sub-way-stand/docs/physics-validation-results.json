@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-10-14T08:21:45.018Z",
+  "scope": "Analytical and synthetic software verification only; no Seoul train measurement or fall-prevention study.",
+  "acceleration": {
+    "unit": "m/s²",
+    "reference": "Independent resultant-force rotation",
+    "speedsMs": "0..35 in 1 m/s steps",
+    "radiiM": [
+      150,
+      300,
+      450,
+      800,
+      1200
+    ],
+    "cantsRad": [
+      -0.12,
+      -0.06,
+      0,
+      0.06,
+      0.12
+    ],
+    "bothTurnDirections": true,
+    "before": {
+      "samples": 1800,
+      "maxAbsoluteError": 0.05872947386009031,
+      "rmse": 0.009292751178708111
+    },
+    "after": {
+      "samples": 1800,
+      "maxAbsoluteError": 3.552713678800501e-15,
+      "rmse": 3.3958309090732353e-16
+    },
+    "tolerance": 1e-12
+  },
+  "jerk": {
+    "unit": "m/s³",
+    "reference": "Central difference of independent force reference, dt = 0.0001 s",
+    "constantSpeedShortcut": {
+      "samples": 486,
+      "maxAbsoluteError": 0.3659822708082954,
+      "rmse": 0.13327901729131347
+    },
+    "fullDerivative": {
+      "samples": 486,
+      "maxAbsoluteError": 2.9286129077377154e-11,
+      "rmse": 8.999683953247441e-12
+    },
+    "tolerance": 1e-7
+  },
+  "accelerationIntervals": {
+    "samples": 14472,
+    "violations": 0
+  },
+  "profileInverse": {
+    "unit": "m",
+    "samples": 1010,
+    "maxAbsoluteError": 4.547473508864641e-13,
+    "rmse": 6.21848082775652e-14,
+    "tolerance": 1e-8
+  },
+  "regression": {
+    "entrySpeedMs": 3.4641016151377544,
+    "entryAccelerationMs2": -0.06806636555400555,
+    "peakOnlySway": "right",
+    "correctedForecastState": "suppressed",
+    "correctedForecastSway": "none",
+    "correctedSuppressReason": "low-confidence",
+    "unknownCantState": "suppressed"
+  },
+  "fieldValidation": {
+    "performed": false,
+    "required": [
+      "Verified track radius and cant with uncertainty",
+      "Synchronized speed/position reference",
+      "Fixed, calibrated reference IMU and phone measurements",
+      "Held-out runs covering both directions and operating conditions"
+    ]
+  }
+}

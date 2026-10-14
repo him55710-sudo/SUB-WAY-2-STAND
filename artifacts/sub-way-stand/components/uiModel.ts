@@ -227,6 +227,7 @@ export function sourceLabel(f: Pick<Forecast, 'source'>): { label: string; tone:
 }
 
 export const CURVE_SOURCE_KO: Record<CurveSource, string> = {
+  'osm-centerline': 'OpenStreetMap 실제 선로 중심선 · 미검증',
   'station-geometry-approx': '역 좌표 기반 근사',
   curated: '검수된 선형 자료',
   synthetic: '가상 곡선(시연용)',
@@ -271,10 +272,17 @@ export function suppressCopy(reason: SuppressReason | null): SuppressCopy {
   }
 }
 
-/** "약 8–14초 후" — rounded, ordered, never negative. */
+/** Whole-second display bounds, rounded outward and never negative. */
+export function etaSecondBounds(eta: NumericRange): NumericRange {
+  return {
+    min: Math.max(0, Math.floor(Math.min(eta.min, eta.max))),
+    max: Math.max(0, Math.ceil(Math.max(eta.min, eta.max))),
+  };
+}
+
+/** "약 7–14초 후" — contains the entire computed interval. */
 export function etaPhrase(eta: NumericRange): string {
-  const lo = Math.max(0, Math.round(Math.min(eta.min, eta.max)));
-  const hi = Math.max(0, Math.round(Math.max(eta.min, eta.max)));
+  const { min: lo, max: hi } = etaSecondBounds(eta);
   if (hi <= 0) return '지금';
   if (lo === hi) return `약 ${lo}초 후`;
   return `약 ${lo}–${hi}초 후`;
@@ -282,12 +290,12 @@ export function etaPhrase(eta: NumericRange): string {
 
 export type RidePhase = 'suppressed' | 'approach' | 'now';
 
-/** "now" once the earliest plausible entry is within this many seconds. */
+/** "now" only when the latest plausible entry is within this many seconds. */
 export const NOW_THRESHOLD_S = 2;
 
 export function ridePhase(f: Pick<Forecast, 'state' | 'etaWindowS' | 'sway'>): RidePhase {
   if (f.state !== 'active' || f.sway === 'none') return 'suppressed';
-  if (f.etaWindowS && f.etaWindowS.min <= NOW_THRESHOLD_S) return 'now';
+  if (f.etaWindowS && f.etaWindowS.max <= NOW_THRESHOLD_S) return 'now';
   return 'approach';
 }
 

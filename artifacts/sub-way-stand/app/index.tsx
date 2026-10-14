@@ -1,1 +1,1 @@
-export { default } from '@/screens/TrainSelectScreen';
+export { default } from "@/screens/HomeScreen";

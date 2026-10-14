@@ -44,7 +44,7 @@ export function EtaBand({ eta, reducedMotion }: { eta: NumericRange; reducedMoti
   return (
     <View
       accessible
-      accessibilityLabel={`곡선 진입까지 ${Math.round(lo)}초에서 ${Math.round(hi)}초`}
+      accessibilityLabel={`곡선 진입까지 ${Math.floor(lo)}초에서 ${Math.ceil(hi)}초`}
       style={styles.wrap}
     >
       <View style={styles.trackWrap} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>

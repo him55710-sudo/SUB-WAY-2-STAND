@@ -44,7 +44,7 @@ import {
   signedCant,
   signedCurvature,
 } from './physics.ts';
-import { SPEED_BAND, makeProfile, peakSpeedOver, positionAt, timeAt } from './forecastProfile.ts';
+import { SPEED_BAND, makeProfile, minSpeedOver, peakSpeedOver, positionAt, timeAt } from './forecastProfile.ts';
 import type { Profile } from './forecastProfile.ts';
 
 // ---------------------------------------------------------------------------
@@ -88,6 +88,7 @@ export const CONFIDENCE_KO: Record<Confidence, string> = {
 };
 export const CURVE_SOURCE_KO: Record<CurveSource, string> = {
   'station-geometry-approx': '역 좌표 기반 근사',
+  'osm-centerline': 'OpenStreetMap 실제 선로 중심선(미검증)',
   curated: '정리된 선로 자료',
   synthetic: '가상(합성) 곡선',
 };
@@ -116,9 +117,12 @@ export function ageConfidence(ageS: number): Confidence {
 }
 
 const range = (min: number, max: number): NumericRange => ({ min, max });
-const round1 = (x: number) => Math.round(x * 10) / 10;
-const round2 = (x: number) => Math.round(x * 100) / 100;
-const roundRange = (r: NumericRange) => range(round1(r.min), round1(r.max));
+/** Round OUTWARD: displaying a range must never exclude its raw bounds. */
+export const outwardRange = (r: NumericRange, digits: number): NumericRange => {
+  const scale = 10 ** digits;
+  return range(Math.floor(r.min * scale) / scale, Math.ceil(r.max * scale) / scale);
+};
+const roundRange = (r: NumericRange) => outwardRange(r, 1);
 const finitePositive = (x: number) => Number.isFinite(x) && x > 0;
 const fmtRange = (r: NumericRange, f: (x: number) => string) => {
   const a = f(r.min);
@@ -145,7 +149,8 @@ export function validSegment(seg: RouteSegment | null | undefined): boolean {
       c.startOffsetM >= 0 &&
       c.startOffsetM <= seg.lengthM &&
       Number.isFinite(c.lengthM) &&
-      c.lengthM >= 0 &&
+      c.lengthM > 0 &&
+      c.startOffsetM + c.lengthM <= seg.lengthM &&
       finitePositive(c.radiusM) &&
       (c.turn === 'left' || c.turn === 'right') &&
       (c.cantRad === undefined || (Number.isFinite(c.cantRad) && Math.abs(c.cantRad) <= MAX_CANT_RAD)),
@@ -230,7 +235,7 @@ export type CurveCandidate = {
   curve: CurveFeature;
   /** Seconds until curve entry, clamped at 0. */
   etaS: NumericRange;
-  /** Peak-speed band through the curve, m/s. */
+  /** Speed envelope over the ENTIRE curve (entry through exit), m/s. */
   speedMs: NumericRange;
   /** Train position along `segment`. */
   positionM: NumericRange;
@@ -286,10 +291,22 @@ export function forecastFromCandidates(cands: CurveCandidate[], ctx: CandidateCo
   let weakMax: number | null = null;
   for (const cand of cands) {
     const { curve } = cand;
+    const validRange = (r: NumericRange) =>
+      Number.isFinite(r.min) && Number.isFinite(r.max) && r.min >= 0 && r.max >= r.min;
+    if (!validSegment(cand.segment) || !validRange(cand.speedMs) || !validRange(cand.etaS)
+      || !validRange(cand.positionM)) {
+      return sup('invalid-input', ['곡선의 속도·위치·도달 시각 범위가 유효하지 않아 안내하지 않습니다.']);
+    }
     if (ctx.requireVerified && !ctx.requireVerified(curve)) {
       return sup('low-confidence', [
         `${curveLabel(cand)}: 검증된 선로 형상이 아닙니다(${CURVE_SOURCE_KO[curve.source]}).`,
         '실시간 열차에는 검증된 곡선 자료가 있을 때만 쏠림 방향을 안내합니다.',
+      ]);
+    }
+    if (ctx.source === 'live-estimate' && curve.cantRad === undefined) {
+      return sup('low-confidence', [
+        `${curveLabel(cand)}: 캔트(선로 기울기) 자료가 없습니다.`,
+        '캔트 미상을 0으로 단정하면 쏠림 방향이 뒤바뀔 수 있어 안내를 보류합니다.',
       ]);
     }
     const kappa = signedCurvature(curve.radiusM, curve.turn);
@@ -301,7 +318,7 @@ export function forecastFromCandidates(cands: CurveCandidate[], ctx: CandidateCo
     );
     if (band.ambiguous) {
       return sup('low-confidence', [
-        `${curveLabel(cand)}: 캔트(편경사) 때문에 속도에 따라 쏠림 방향이 바뀔 수 있습니다.`,
+        `${curveLabel(cand)}: 곡선 진입·이탈 속도와 캔트에 따라 쏠림 방향이 바뀌거나 미약할 수 있습니다.`,
         '방향이 불확실해 안내하지 않습니다.',
       ]);
     }
@@ -312,8 +329,8 @@ export function forecastFromCandidates(cands: CurveCandidate[], ctx: CandidateCo
     if (curve.confidence === 'unavailable') {
       return sup('low-confidence', [`${curveLabel(cand)}: 곡선 자료의 신뢰도를 알 수 없어 안내하지 않습니다.`]);
     }
-    const etaS = range(round1(cand.etaS.min), round1(cand.etaS.max));
-    const spreadLevel = spreadConfidence(etaS.max - etaS.min);
+    const etaS = outwardRange(cand.etaS, 1);
+    const spreadLevel = spreadConfidence(cand.etaS.max - cand.etaS.min);
     if (spreadLevel === 'unavailable') {
       return sup('low-confidence', [
         `${curveLabel(cand)}까지 도달 시각 범위가 ${Math.round(etaS.min)}–${Math.round(etaS.max)}초로 너무 넓습니다.`,
@@ -321,8 +338,8 @@ export function forecastFromCandidates(cands: CurveCandidate[], ctx: CandidateCo
       ]);
     }
     const sway = band.sway;
-    const accel = range(round2(band.min), round2(band.max));
-    const cantNote = curve.cantRad !== undefined ? ' (캔트 반영)' : '';
+    const accel = outwardRange(band, 2);
+    const cantNote = curve.cantRad !== undefined ? ' (캔트 반영)' : ' (캔트 미상·0 가정)';
     const lines = [
       ...head,
       `${curveLabel(cand)} → 승객은 ${SWAY_KO[sway]}으로 쏠림`,
@@ -347,8 +364,8 @@ export function forecastFromCandidates(cands: CurveCandidate[], ctx: CandidateCo
   }
   if (weakMax !== null) {
     return sup('no-curve-ahead', [
-      `앞 곡선의 예상 횡가속도가 최대 ${ms2(weakMax)} m/s²로 체감 기준(${COMFORT_THRESHOLD_MS2} m/s²) 미만입니다.`,
-      '흔들림이 거의 없어 안내하지 않습니다.',
+      `앞 곡선의 모델 횡가속도가 최대 ${ms2(weakMax)} m/s²로 안내 표시 기준(${COMFORT_THRESHOLD_MS2} m/s²) 미만입니다.`,
+      '앱의 표시 기준이며 인체의 체감·안전 한계를 의미하지 않습니다.',
     ]);
   }
   return sup('no-curve-ahead', [ctx.noCurveKo]);
@@ -511,7 +528,7 @@ export function computeLiveForecast(input: LiveForecastInput): Forecast {
         segment: leg.segment,
         curve,
         etaS: range(Math.max(0, entryMin), Math.max(0, entryMax)),
-        speedMs: range(peakSpeedOver(leg.slow, start, end), peakSpeedOver(leg.fast, start, end)),
+        speedMs: range(minSpeedOver(leg.slow, start, end), peakSpeedOver(leg.fast, start, end)),
         positionM: positionOnLeg(leg),
         nextSegment: i > currentIdx,
       });

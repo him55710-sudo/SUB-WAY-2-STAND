@@ -12,6 +12,7 @@ import {
   type GuidanceMemory,
   decideGuidance,
   initialGuidanceMemory,
+  nowText,
   planOutput,
   resolveAvailability,
   pickKoreanVoice,
@@ -102,7 +103,16 @@ test('now cue fires at entry time (earliest entry ≤ NOW_LEAD_S) after the pre-
   const { actions } = run([active(9), active(6), active(3), active(1.5), active(NOW_LEAD_S), active(0.2)]);
   assert.deepEqual(kinds(actions), ['pre-warning', 'now']);
   const now = actions[1]!;
-  assert.equal(now.type === 'announce' && now.textKo, '지금 곡선 진입. 왼쪽 쏠림 주의.');
+  assert.equal(now.type === 'announce' && now.textKo, '곡선 진입 가능 구간입니다. 왼쪽 쏠림에 대비하세요.');
+});
+
+test('uncertain live entry is worded as possible; resolved and simulated entry retain the now cue', () => {
+  const unresolved = active(0);
+  assert.match(nowText(unresolved)!, /진입 가능/);
+  assert.ok(!nowText(unresolved)!.includes('지금 곡선 진입'));
+  const resolved = { ...unresolved, etaWindowS: { min: 0, max: 0 } };
+  assert.match(nowText(resolved)!, /지금 곡선 진입/);
+  assert.match(nowText({ ...resolved, source: 'simulation' })!, /^시뮬레이션 안내: 지금/);
 });
 
 test('a pre-warning that would be too late is skipped, the now cue still follows', () => {
@@ -290,7 +300,7 @@ test('voice toggled off: no speech, haptics still fire, and nothing is replayed 
   const reenabled = step(active(7), 1, true);
   assert.deepEqual(reenabled, { stopSpeech: false, speak: null, haptic: null });
   const now = step(active(0.5), 2, true);
-  assert.equal(now.speak, '지금 곡선 진입. 왼쪽 쏠림 주의.');
+  assert.equal(now.speak, '곡선 진입 가능 구간입니다. 왼쪽 쏠림에 대비하세요.');
   assert.equal(now.stopSpeech, true, 'a new cue interrupts any speech still playing');
 });
 

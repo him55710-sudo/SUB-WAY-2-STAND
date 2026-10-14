@@ -1,0 +1,13 @@
+node_modules
+**/node_modules
+**/.expo
+**/dist
+**/static-build
+.agents
+attached_assets
+.replit
+.replitignore
+**/*.tsbuildinfo
+.deploy-*
+**/.env*
+artifacts/mockup-sandbox

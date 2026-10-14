@@ -9,8 +9,9 @@ that stop while it is happening.
 Code: `lib/motionDetector.ts` (detector), `lib/sensorGate.ts` (gate),
 `services/motionSensor.ts` (`useMotionSensor`, `useSensorGate`). Tests:
 `tests/motionDetector.test.ts`, `tests/sensorGate.test.ts` (synthetic traces).
-The ride screen wiring is a separate integration step; this module does not
-change any screen.
+The ride screen uses `usePhoneMotion` for an explicit permission action and
+`useSensorGate` for a conservative hold. Sensors remain off until the rider
+taps the sensor button; the simulation never consumes phone measurements.
 
 ## Detected, not predicted
 
@@ -31,7 +32,7 @@ phone sensor** and is **not a prediction**.
 | Stop, confident | 진입 / 도착 (at a station) | No change: normal dwell. |
 | Renewed motion after such a stop | same observation | Suppressed as `delayed` until the feed sends an observation newer than the stop start (the position estimate no longer holds). |
 | Handling, low confidence, stale, no data | any | No new decision. Without a stop already held, the forecast passes through. With one held, the last hold stays. |
-| Sensor off, web, no sensor, permission denied | any | No effect at all. |
+| Sensor off, no sensor, permission denied | any | No effect at all. |
 | Simulation forecast | — | Never touched. |
 
 The gate can only hold a forecast. It never creates, moves or strengthens one,
@@ -79,3 +80,36 @@ they check the logic, not real-world accuracy.
 - iOS asks for motion permission (text set in `app.json`). Denied permission
   means `unavailable`, with no effect on any forecast.
 - Turned off with `EXPO_PUBLIC_FLAG_MOTION_SENSOR=0` (see `config/flags.ts`).
+
+## Browser support
+
+- On HTTPS (or localhost), `services/browserMotionSensor.ts` reads actual
+  `devicemotion` events. `lib/browserMotion.ts` validates every axis and
+  converts rotation from degrees/s to radians/s. Missing readings never
+  become zero acceleration or stillness evidence.
+- iOS Safari's `DeviceMotionEvent.requestPermission()` runs directly in the
+  button handler. Denial leaves the sensor off. Other browsers still need
+  actual hardware readings; desktop support for the API alone is not enough.
+- A browser that sends no usable events reports `no-sensor` after five
+  seconds. Hidden pages release listeners and reset the detector on return.
+- Browser frequency is controlled by the browser, not by our 50 Hz native
+  setting. Handheld movement and smooth train travel remain ambiguous. The
+  phone reading is not a measured train speed or verified stop.
+- Added tests are synthetic API payload and lifecycle checks, not validation
+  on physical phones or recorded subway rides.
+
+## Foreground location
+
+`services/location.ts` exposes `useLocation()`. Location permission and the
+watch begin only after `requestLocation()` is called by the rider. Web uses
+the browser Geolocation API; native builds use `expo-location` foreground
+permissions. Unmount, stop, backgrounding, errors and expired fixes release
+the watch, including subscriptions that resolve after a permission prompt.
+
+The local 2호선 main-loop station dataset provides up to three station
+suggestions within 5 km. Fixes older than 60 seconds, accuracy worse than
+1 km or invalid coordinates produce no suggestions. A first fix times out
+after 20 seconds with a manual station-selection message. Location is neither
+uploaded by this service nor persisted. GPS cannot be assumed to work
+underground and does not identify the passenger's train, direction, track,
+speed or position inside a tunnel. Riders confirm the station and train.

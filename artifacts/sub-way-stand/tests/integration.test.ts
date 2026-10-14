@@ -64,7 +64,7 @@ const VERIFIED: RouteData = {
   ...ROUTE,
   segments: ROUTE.segments.map((s) => ({
     ...s,
-    curves: s.curves.map((c) => ({ ...c, source: 'curated' as const, confidence: 'high' as const })),
+    curves: s.curves.map((c) => ({ ...c, cantRad: 0, source: 'curated' as const, confidence: 'high' as const })),
   })),
 };
 

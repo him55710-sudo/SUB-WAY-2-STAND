@@ -41,6 +41,8 @@ function scenario(): SimulationScenario {
     id: DEFAULT_SCENARIO_ID,
     titleKo: `${r.label} 주행 시뮬레이션`,
     summaryKo: `정차 → 가속 → 곡선(${curveText}) → 정차를 반복 재생합니다. 실제 열차와 무관한 시뮬레이션입니다.${
+      r.segment.curves.some((c) => c.source === 'osm-centerline') ? ' OSM 실제 선로를 사용하며 속도·캔트 없는 조건은 가정입니다.' : ''
+    }${
       r.usesRouteData ? '' : ' (노선 곡선 데이터가 없어 가상 구간을 사용합니다.)'
     }`,
     durationS: r.durationS,

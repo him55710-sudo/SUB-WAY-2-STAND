@@ -3,17 +3,21 @@
   "version": "0.0.0",
   "license": "MIT",
   "scripts": {
-    "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
-    "build": "pnpm run typecheck && pnpm -r --if-present run build",
+    "preinstall": "node scripts/preinstall.cjs",
+    "build": "pnpm run typecheck && pnpm run build:web && pnpm --filter @workspace/api-server run build",
     "typecheck:libs": "tsc --build",
-    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
+    "typecheck": "pnpm run typecheck:libs && tsc -p api/tsconfig.json --noEmit && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
+    "build:web": "pnpm --filter @workspace/sub-way-stand exec expo export --platform web"
   },
   "private": true,
   "dependencies": {
+    "@workspace/api-zod": "workspace:*",
     "@replit/connectors-sdk": "^0.4.3"
   },
   "devDependencies": {
+    "@types/node": "catalog:",
     "prettier": "^3.9.6",
     "typescript": "~5.9.3"
-  }
+  },
+  "packageManager": "pnpm@11.25.0"
 }

@@ -86,7 +86,7 @@ export interface RouteStation {
   order: number;
 }
 
-export type CurveSource = 'station-geometry-approx' | 'curated' | 'synthetic';
+export type CurveSource = 'station-geometry-approx' | 'osm-centerline' | 'curated' | 'synthetic';
 
 export interface CurveFeature {
   id: string;

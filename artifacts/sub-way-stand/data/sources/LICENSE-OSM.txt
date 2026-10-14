@@ -1,0 +1,33 @@
+OpenStreetMap data attribution and provenance
+
+Copyright OpenStreetMap contributors.
+Data and the derived line2Centerline.ts database are made available under
+the Open Data Commons Open Database License (ODbL) 1.0:
+https://opendatacommons.org/licenses/odbl/1-0/
+Attribution and copyright information: https://www.openstreetmap.org/copyright
+
+One bounded extract was downloaded on 2026-10-14 from the official read API:
+https://api.openstreetmap.org/api/0.6/map?bbox=127.095,37.511,127.107,37.523
+Original XML SHA256:
+73E0323CEA1E51B8409E31CFF4A6F2491844E467BF0F5C7A95C9A8EF54626C50
+
+line2-jamsil-osm.json preserves the Line 2 railway ways and their nodes,
+including source element ids, versions, timestamps and tags. Unrelated
+features from the bounded extract were removed. This is an offline import;
+the deployed application does not query the OSM editing API.
+
+Reproduce preprocessing (Node 24, from the app directory):
+node scripts/import-line2-centerline.mts
+
+The importer follows connected railway nodes between named stop_position
+nodes at Jamsil and Jamsillaru. It projects into a local metric east/north
+plane and computes signed curvature at 20 m samples using an 80 m baseline.
+The median curvature of each contiguous same-turn run represents that run.
+The reverse direction reuses the representative alignment with reversed
+offsets and curve signs; the precise directional rail is not verified.
+
+Mapped coordinates, cant and actual rail use have not been surveyed or
+validated against a real journey. The 10 m coordinate perturbation is an
+assumed sensitivity scenario, not a measured positional accuracy or a
+probabilistic confidence bound. Imported curves remain low confidence,
+osm-centerline, and ineligible for live directional voice guidance.

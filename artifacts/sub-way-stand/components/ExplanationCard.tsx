@@ -1,4 +1,5 @@
 import { Feather } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -12,7 +13,7 @@ const f2 = (n: number) => n.toFixed(2);
 function Fact({ label, value }: { label: string; value: string }) {
   const c = useColors();
   return (
-    <View style={[styles.fact, { backgroundColor: c.sunken, borderColor: c.border }]}>
+    <View style={[styles.fact, { borderColor: c.border }]}>
       <Text style={[styles.factLabel, { color: c.faint }]}>{label}</Text>
       <Text style={[styles.factValue, { color: c.foreground }]}>{value}</Text>
     </View>
@@ -44,7 +45,7 @@ export function ExplanationCard({ forecast, reducedMotion }: { forecast: Forecas
   if (pos) facts.push({ label: '위치 불확실성', value: `±${Math.round(Math.abs(pos.max - pos.min) / 2)} m` });
 
   return (
-    <View style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}>
+    <View style={[styles.card, { borderColor: c.border }]}>
       <Pressable
         testID="explain-toggle"
         accessibilityRole="button"
@@ -53,7 +54,7 @@ export function ExplanationCard({ forecast, reducedMotion }: { forecast: Forecas
         onPress={() => setOpen((v) => !v)}
         style={({ pressed }) => [styles.head, { opacity: pressed ? 0.75 : 1 }]}
       >
-        <View style={[styles.qIcon, { backgroundColor: c.raised }]}>
+        <View style={styles.qIcon}>
           <Feather name="help-circle" size={18} color={c.foreground} />
         </View>
         <Text style={[styles.title, { color: c.foreground }]}>왜 이렇게 예측했나요?</Text>
@@ -81,8 +82,8 @@ export function ExplanationCard({ forecast, reducedMotion }: { forecast: Forecas
 
           <View style={[styles.formula, { borderColor: c.border }]}>
             <Text style={[styles.formulaText, { color: c.mutedForeground }]}>
-              원리: 곡선에서 열차는 안쪽으로 돌고, 서 있는 몸은 관성 때문에 바깥쪽으로 밀립니다 (횡가속도 a = v²/R).
-              좌곡선이면 오른쪽, 우곡선이면 왼쪽으로 쏠립니다.
+              원리: 속도·곡률·선로 기울기를 함께 반영합니다 (a = v²κ cosθ − g sinθ).
+              평탄한 선로에서는 곡선 바깥쪽으로 밀리지만, 기울기와 저속 주행에 따라 방향이 바뀔 수 있어요.
             </Text>
             <Text style={[styles.formulaText, { color: c.faint }]}>
               {forecast.source === 'simulation'
@@ -92,12 +93,17 @@ export function ExplanationCard({ forecast, reducedMotion }: { forecast: Forecas
           </View>
         </Animated.View>
       ) : null}
+      <Pressable testID="ride-open-evidence" accessibilityRole="button" accessibilityLabel="물리 모델 검증 결과와 연구 근거 보기" onPress={() => router.push('/evidence')} style={({ pressed }) => [styles.evidenceLink, { borderColor: c.border, opacity: pressed ? 0.6 : 1 }]}>
+        <Feather name="file-text" size={17} color={c.mutedForeground} />
+        <View style={{ flex: 1, gap: 4 }}><Text style={[styles.evidenceTitle, { color: c.foreground }]}>계산은 검증했어요. 실제 운행 실측은 아직이에요.</Text><Text style={[styles.formulaText, { color: c.mutedForeground }]}>검증 수치 · 모델의 가정과 한계 · 연구 원문 보기</Text></View>
+        <Feather name="arrow-up-right" size={18} color={c.mutedForeground} />
+      </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { borderWidth: 1, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 4 },
+  card: { borderTopWidth: 1, paddingVertical: 4 },
   head: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 56 },
   qIcon: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   title: { flex: 1, fontSize: 16, fontWeight: '800' },
@@ -106,9 +112,11 @@ const styles = StyleSheet.create({
   dot: { width: 5, height: 5, borderRadius: 3, marginTop: 8 },
   line: { flex: 1, fontSize: 14, lineHeight: 21 },
   facts: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  fact: { flexGrow: 1, flexBasis: '46%', borderWidth: 1, borderRadius: 12, padding: 10, gap: 3 },
+  fact: { flexGrow: 1, flexBasis: '46%', borderLeftWidth: 1, padding: 10, gap: 3 },
   factLabel: { fontSize: 11, fontWeight: '700' },
   factValue: { fontSize: 14, fontFamily: typography.num, fontVariant: ['tabular-nums'] },
   formula: { borderTopWidth: 1, paddingTop: 10, gap: 6 },
   formulaText: { fontSize: 12, lineHeight: 18 },
+  evidenceLink: { borderTopWidth: 1, paddingVertical: 18, flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 64 },
+  evidenceTitle: { fontSize: 13, lineHeight: 21, fontWeight: '600' },
 });

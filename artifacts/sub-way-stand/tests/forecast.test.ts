@@ -17,6 +17,7 @@ import {
   isVerifiedCurve,
   minConfidence,
   newerObservation,
+  outwardRange,
   safeForecast,
   spreadConfidence,
 } from '../lib/forecastEngine.ts';
@@ -38,6 +39,7 @@ const curve = (over: Partial<CurveFeature> = {}): CurveFeature => ({
   startOffsetM: 400,
   lengthM: 150,
   radiusM: 400,
+  cantRad: 0, // Explicitly level track in this invented test fixture.
   turn: 'left',
   source: 'curated',
   confidence: 'high',
@@ -172,11 +174,40 @@ test('ETA window bounds = [fast entry − (age + lag), slow entry − age + hold
   const slow = makeProfile(1000, SPEED_BAND.slow);
   const expMin = timeAt(fast, 400) - age - DEPARTURE_LAG_S;
   const expMax = timeAt(slow, 400) - age + HOLD_RATE * age;
-  assert.ok(near(f.etaWindowS!.min, expMin), `${f.etaWindowS!.min} vs ${expMin}`);
-  assert.ok(near(f.etaWindowS!.max, expMax), `${f.etaWindowS!.max} vs ${expMax}`);
-  // Peak speed through the curve sets the acceleration band (11–18 m/s on R400).
+  assert.ok(f.etaWindowS!.min <= expMin && expMin - f.etaWindowS!.min < 0.1);
+  assert.ok(f.etaWindowS!.max >= expMax && f.etaWindowS!.max - expMax < 0.1);
+  // This entire curve is on both cruise plateaus (11–18 m/s on R400).
   assert.ok(near(f.lateralAccelMs2!.min, (11 * 11) / 400, 0.006));
   assert.ok(near(f.lateralAccelMs2!.max, (18 * 18) / 400, 0.006));
+});
+
+test('a verified live curve without cant is held instead of assuming level track', () => {
+  const f = live(train({}, 3), {
+    segments: [seg('A', 'B', 1000, [curve({ cantRad: undefined })])],
+  });
+  assert.equal(f.suppressReason, 'low-confidence');
+  assert.equal(f.sway, 'none');
+  assert.ok(f.explanationKo.some((line) => line.includes('캔트')));
+});
+
+test('curve entry speed below cant balance is included even when both peak speeds exceed balance', () => {
+  // Old peak-only envelope [11,18] missed the inward push near entry (~3.46 m/s).
+  const f = live(train({}, 0), {
+    segments: [seg('A', 'B', 1000, [curve({ startOffsetM: 10, lengthM: 300, cantRad: 0.01 })])],
+  });
+  assert.equal(f.suppressReason, 'low-confidence');
+  assert.equal(f.sway, 'none');
+});
+
+test('displayed intervals contain raw values rather than rounding uncertainty away', () => {
+  for (const r of [{ min: 0.154, max: 0.156 }, { min: 2.049, max: 8.051 }, { min: 0, max: 0 }]) {
+    for (const digits of [1, 2]) {
+      const out = outwardRange(r, digits);
+      assert.ok(out.min <= r.min && out.max >= r.max);
+      assert.ok(r.min - out.min < 10 ** -digits + 1e-12);
+      assert.ok(out.max - r.max < 10 ** -digits + 1e-12);
+    }
+  }
 });
 
 test('right curve → passenger leans left', () => {
@@ -294,7 +325,7 @@ test('suppression reasons with Korean explanations', () => {
     assert.ok(f.explanationKo.every((l) => /[가-힣]/.test(l)), `${name}: Korean lines`);
   }
   const weak = live(train({}, 3), { segments: [seg('A', 'B', 1000, [curve({ radiusM: 5000 })])] });
-  assert.ok(weak.explanationKo.some((l) => l.includes('체감 기준')));
+  assert.ok(weak.explanationKo.some((l) => l.includes('안내 표시 기준')));
 });
 
 test('small clock skew is tolerated (treated as age 0)', () => {

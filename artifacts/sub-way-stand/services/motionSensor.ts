@@ -9,9 +9,11 @@
  *   gravity estimate (the gyroscope is optional; without it the forward axis
  *   is never learned).
  * - `unavailable` (and no subscription) when FLAGS.motionSensor is off, the
- *   caller passes `enabled: false`, on web, without sensors, when motion
+ *   caller passes `enabled: false`, without sensors, when motion
  *   permission is denied, or on a sensor error.
  * - Sensors are released while the app is in the background and on unmount.
+ * - Web uses browser DeviceMotion events. usePhoneMotion provides the explicit
+ *   permission button required by iOS; silent/desktop sensors report unavailable.
  *
  * useSensorGate — holds the lib/sensorGate memory for a component and returns
  * the gated forecast. Live forecasts only; simulation passes through.
@@ -21,7 +23,7 @@
  */
 import { Accelerometer, DeviceMotion, Gyroscope } from 'expo-sensors';
 import type { DeviceMotionMeasurement } from 'expo-sensors';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { AppState, Platform } from 'react-native';
 import { FLAGS } from '@/config/flags';
 import type {
@@ -44,6 +46,7 @@ import {
   applySensorGate,
   initialSensorGateMemory,
 } from '@/lib/sensorGate';
+import { useBrowserMotionSensor } from './browserMotionSensor';
 
 /** ≈50 Hz. */
 export const SENSOR_INTERVAL_MS = 20;
@@ -130,6 +133,7 @@ function toState(snap: DetectorSnapshot, source: Source, nowMs: number): MotionS
 
 export const useMotionSensor: UseMotionSensor = (options = {}) => {
   const enabled = options.enabled ?? true;
+  const webState = useBrowserMotionSensor(enabled && FLAGS.motionSensor);
   const [state, setState] = useState<MotionSensorState>(() => {
     const blocked = blockedReason(enabled);
     return blocked ? unavailable(blocked) : { status: 'starting' };
@@ -245,8 +249,51 @@ export const useMotionSensor: UseMotionSensor = (options = {}) => {
     };
   }, [enabled]);
 
-  return state;
+  return Platform.OS === 'web' ? (FLAGS.motionSensor ? webState : unavailable('flag-disabled')) : state;
 };
+
+/** Explicit permission action for the ride screen. Sensors remain off until the rider taps. */
+export function usePhoneMotion(options: { enabled?: boolean } = {}) {
+  const allowed = options.enabled ?? true;
+  const [requested, setRequested] = useState(false);
+  const [failure, setFailure] = useState<MotionSensorState | null>(null);
+  const sensorReading = useMotionSensor({ enabled: allowed && requested });
+  const sensor = allowed ? failure ?? sensorReading : unavailable('disabled');
+  const requestPermission = useCallback(async () => {
+    if (!allowed || !FLAGS.motionSensor) return;
+    setFailure(null);
+    if (Platform.OS === 'web') {
+      if (typeof window === 'undefined' || !window.isSecureContext) { setFailure(unavailable('web')); return; }
+      if (!('DeviceMotionEvent' in window)) { setFailure(unavailable('no-sensor')); return; }
+      const MotionEvent = window.DeviceMotionEvent as typeof DeviceMotionEvent & {
+        requestPermission?: () => Promise<'granted' | 'denied'>;
+      };
+      try {
+        // Called before yielding: Safari requires this within the user's tap.
+        if (MotionEvent.requestPermission && (await MotionEvent.requestPermission()) !== 'granted') {
+          setFailure(unavailable('permission-denied'));
+          return;
+        }
+      } catch { setFailure(unavailable('permission-denied')); return; }
+    }
+    setRequested(true);
+  }, [allowed]);
+  const disable = useCallback(() => { setRequested(false); setFailure(null); }, []);
+  useEffect(() => { if (!allowed) { setRequested(false); setFailure(null); } }, [allowed]);
+  let messageKo = '휴대폰 움직임을 참고해 안내를 보수적으로 조정해요. 열차 속도나 정차를 확정하지는 않아요.';
+  if (sensor.status === 'starting') messageKo = '동작 센서 신호를 기다려요. 휴대폰을 안정적으로 놓아 주세요.';
+  if (sensor.status === 'active') messageKo = sensor.quality === 'handling'
+    ? '휴대폰을 움직이고 있어 판단을 보류해요. 센서값은 열차 속도가 아니에요.'
+    : sensor.quality === 'no-data' ? '동작 센서 측정 준비 중이에요.' : '휴대폰 움직임 측정 중 · 열차 움직임과 다를 수 있어요.';
+  if (sensor.status === 'unavailable') {
+    if (sensor.reason === 'permission-denied') messageKo = '동작 센서 권한이 꺼져 있어요. 브라우저·기기 설정에서 허용할 수 있어요.';
+    if (sensor.reason === 'no-sensor') messageKo = '이 기기·브라우저에서 동작 센서 신호를 받을 수 없어요. 위치·열차 관측 기반 안내를 사용해요.';
+    if (sensor.reason === 'web') messageKo = '동작 센서는 HTTPS와 지원되는 휴대폰 브라우저에서 사용할 수 있어요.';
+    if (sensor.reason === 'flag-disabled') messageKo = '동작 센서 기능이 꺼져 있어요.';
+    if (sensor.reason === 'error') messageKo = '동작 센서를 읽지 못했어요. 센서를 끄고 다시 시도해 주세요.';
+  }
+  return { sensor, enabled: allowed && requested, requestPermission, disable, messageKo };
+}
 
 /**
  * Applies the sensor gate to a forecast and keeps its memory across renders.

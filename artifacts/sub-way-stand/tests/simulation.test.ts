@@ -146,3 +146,18 @@ test('synthetic fallback ride plays a left then a right curve', () => {
   assert.deepEqual(turns, ['left', 'right']);
   assert.ok(simulateForecast(ride, 20, NOW).explanationKo[0]!.includes('가상 구간'));
 });
+
+test('simulation includes entry/exit speed instead of announcing an incorrect peak-only direction', () => {
+  const c = { ...curve('banked', 40, 'left'), lengthM: 250, cantRad: 0.04 };
+  const ride = buildSimRide({ ...LINE2, segments: [seg('A', 'B', 1000, [c])] });
+  const f = simulateForecast(ride, ride.runStartS + 1, NOW);
+  assert.equal(f.suppressReason, 'low-confidence');
+  assert.equal(f.sway, 'none');
+});
+
+test('unknown cant in simulation is explicitly shown as an assumption', () => {
+  const ride = buildSimRide(null);
+  const f = simulateForecast(ride, ride.runStartS + 5, NOW);
+  assert.equal(f.state, 'active');
+  assert.ok(f.explanationKo.some((line) => line.includes('캔트 미상·0 가정')));
+});

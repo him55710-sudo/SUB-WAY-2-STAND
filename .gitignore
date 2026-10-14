@@ -47,3 +47,9 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Local secrets and deployment metadata
+.env*
+!.env.example
+.vercel/
+.deploy-*

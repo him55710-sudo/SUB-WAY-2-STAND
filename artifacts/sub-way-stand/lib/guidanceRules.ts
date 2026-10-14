@@ -86,6 +86,9 @@ export function preWarningText(f: Forecast): string | null {
 /** e.g. "지금 곡선 진입. 왼쪽 쏠림 주의." */
 export function nowText(f: Forecast): string | null {
   if (f.sway !== 'left' && f.sway !== 'right') return null;
+  if (f.source === 'live-estimate' && f.etaWindowS && f.etaWindowS.max > NOW_LEAD_S) {
+    return `곡선 진입 가능 구간입니다. ${SIDE_KO[f.sway]} 쏠림에 대비하세요.`;
+  }
   return `${prefixFor(f)}지금 곡선 진입. ${SIDE_KO[f.sway]} 쏠림 주의.`;
 }
 

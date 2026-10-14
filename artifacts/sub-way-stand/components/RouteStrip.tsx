@@ -1,6 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import React, { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import Svg, { Circle, Line } from 'react-native-svg';
 import type { Forecast, RideSelection, TrainCandidate } from '@/contracts';
@@ -58,7 +58,7 @@ export function routeStripData(
       note: !ride
         ? '알 수 없는 시뮬레이션입니다.'
         : ride.usesRouteData
-          ? `${ride.label} · ${Math.round(ride.segment.lengthM)} m · 역 좌표로 근사한 곡선 위를 가상으로 달립니다. 실제 열차와 무관합니다.`
+          ? `${ride.label} · ${Math.round(ride.segment.lengthM)} m · ${ride.segment.curves.some((cv) => cv.source === 'osm-centerline') ? 'OpenStreetMap 실제 선로 중심선(미검증)' : '역 좌표로 근사한 곡선'} 위를 가상으로 달립니다. 실제 열차와 무관합니다.`
           : `${ride.label} · ${Math.round(ride.segment.lengthM)} m · 실제 노선이 아닌 시연용 선로입니다.`,
       synthetic: true,
       estimatedFromState: false,
@@ -75,7 +75,9 @@ export function routeStripData(
       ? { label: '예시 노선 · 가상 곡선', tone: 'warn' as Tone }
       : verified
         ? { label: '검수 노선 자료', tone: 'live' as Tone }
-        : { label: '역 좌표 근사 곡선', tone: 'warn' as Tone };
+        : route.segments.some((s) => s.curves.some((cv) => cv.source === 'osm-centerline'))
+          ? { label: 'OSM 선로 · 일부 구간 · 미검증', tone: 'muted' as Tone }
+          : { label: '역 좌표 근사 곡선', tone: 'warn' as Tone };
 
   let input: StripInput | null = null;
   let estimatedFromState = false;
@@ -194,21 +196,6 @@ export function RouteStrip({ data, reducedMotion }: { data: RouteStripData; redu
                 {model.gaps.map(([a, b]) => (
                   <Line key={`gapd-${a}`} x1={px(a)} y1={RAIL_Y} x2={px(b)} y2={RAIL_Y} stroke={c.faint} strokeWidth={2} strokeDasharray="4 5" />
                 ))}
-                {model.curves.map((cv) =>
-                  cv.active ? (
-                    <Line
-                      key={`glow-${cv.id}`}
-                      x1={px(cv.x0)}
-                      y1={RAIL_Y}
-                      x2={px(cv.x1)}
-                      y2={RAIL_Y}
-                      stroke={turnColor(cv.turn)}
-                      strokeOpacity={0.3}
-                      strokeWidth={18}
-                      strokeLinecap="round"
-                    />
-                  ) : null,
-                )}
                 {model.curves.map((cv) => (
                   <Line
                     key={cv.id}
@@ -257,7 +244,7 @@ export function RouteStrip({ data, reducedMotion }: { data: RouteStripData; redu
               })}
 
               {model.train ? (
-                <Animated.View style={[styles.train, { top: RAIL_Y - 9, backgroundColor: c.foreground, shadowColor: c.foreground }, trainStyle]}>
+                <Animated.View style={[styles.train, { top: RAIL_Y - 9, backgroundColor: c.foreground }, trainStyle]}>
                   <Feather name="chevron-right" size={14} color={c.background} />
                 </Animated.View>
               ) : null}
@@ -297,10 +284,15 @@ export function RouteStrip({ data, reducedMotion }: { data: RouteStripData; redu
 
       <View style={styles.footRow}>
         <Feather name="info" size={12} color={c.faint} style={{ marginTop: 2 }} />
-        <Text style={[styles.caption, { color: c.faint }]} numberOfLines={3}>
+        <Text style={[styles.caption, { color: c.faint }]}>
           진행 방향 →{data.estimatedFromState ? ' · 열차 위치는 역 단위 상태로 추정' : ''} · {data.note}
         </Text>
       </View>
+      {data.note.includes('OpenStreetMap') || data.note.includes('선로') ? (
+        <Pressable accessibilityRole="link" accessibilityLabel="OpenStreetMap 저작권과 ODbL 라이선스" onPress={() => void Linking.openURL('https://www.openstreetmap.org/copyright')} style={{ minHeight: 48, justifyContent: 'center' }}>
+          <Text style={[styles.caption, { color: c.mutedForeground }]}>© OpenStreetMap contributors · ODbL ↗</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -323,10 +315,6 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowOpacity: 0.5,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 4,
   },
   station: { position: 'absolute', width: 110, gap: 1 },
   role: { fontSize: 10, fontWeight: '800', letterSpacing: 0.6 },

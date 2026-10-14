@@ -16,7 +16,7 @@ stays silent and shows the reason instead of guessing.
 
 1. **열차 선택**: pick a live train on a line (from the Seoul realtime feed),
    or tap **시뮬레이션으로 체험** for a labeled virtual ride on one Line 2
-   segment (신촌→홍대입구) using the bundled approximate curves. The simulation
+   segment (currently 잠실→잠실나루) using the bundled unverified OSM centerline. The simulation
    button stays available when live data is missing, so the fallback is one tap.
 2. **탑승 안내**: the ride screen recomputes a forecast every second:
    which side you will be pushed to, the time window until curve entry, the
@@ -52,27 +52,34 @@ The pure modules (`services/trainFeed.ts`, `data/*`, `lib/*`,
 
 ### Physics (short version)
 
-The model treats the passenger as a point mass in a steady turn. It does not
-model suspension, cabin vibration or crowds.
+The model calculates quasi-static uncompensated acceleration in the track
+plane. It does not predict individual body motion, suspension or crowds.
 
-- Lateral acceleration `a_y = v²·κ − g·sin θ` (κ = 1/R, cant θ only when known).
-- Left curve → pushed right, right curve → pushed left.
-- Entry window = `[d_min / v_max, d_max / v_min]` from distance and speed
-  ranges. If the window is too wide, the sway direction is ambiguous, or the
+- Lateral acceleration `a_y = v²·κ·cos θ − g·sin θ` (κ = ±1/R).
+- On level track: left curve → pushed right, right curve → pushed left.
+  Cant can reverse this at low speed. The speed envelope covers the entire
+  curve, including entry and exit; unresolved or changing directions are held.
+- The app computes entry windows from bounded accelerate/cruise/brake
+  profiles; the legacy constant-speed demo uses `[d_min/v_max, d_max/v_min]`.
+  Displayed intervals are rounded outward. If timing or direction is ambiguous, or the
   train is stopped, stale, delayed or lost, the forecast is **suppressed** with
   a reason.
-- **Live rides only give a direction from verified curves** (`source: 'curated'`).
-  The bundled Line 2 curves are station-geometry approximations, so a live ride
-  today always ends in a hold: **확신이 낮아 안내 보류** (`low-confidence`),
+- **Live rides require verified curves and explicit cant data** (`source: 'curated'`).
+  Unknown cant is held on live rides; simulation explicitly labels its zero-cant assumption.
+  Bundled Line 2 curves are station-geometry approximations or unverified OSM
+  centerlines, so a live ride with a curve ahead is held (`low-confidence`),
   with the curve, its source and the observation age in the explanation. The
-  simulation runs on the same approximate curves and is labeled as simulation.
+  simulation runs on these mapped or approximate curves and is labeled as simulation.
+
+See [물리 검증 결과·연구 근거·심사 Q&A](docs/PHYSICS_VALIDATION.md) and the
+[reproducible numerical results](docs/physics-validation-results.json).
 
 ### Voice guidance rules (`lib/guidanceRules.ts`, unit-tested)
 
 | Rule | Behaviour |
 |---|---|
 | Pre-warning | Once per curve, when an *active* forecast's earliest entry is ≤ 10 s. Skipped if it would arrive later than 3 s before entry. Says the **earliest** time, rounded. |
-| Now cue | Once per curve, when the earliest entry is ≤ 1 s: "지금 곡선 진입. 왼쪽 쏠림 주의." |
+| Now cue | Once per curve when the earliest entry is ≤ 1 s. If live entry is still uncertain: "곡선 진입 가능 구간입니다." Otherwise: "지금 곡선 진입." |
 | Dedupe | One announcement of each kind per curve approach. Flicker back to a curve passed moments ago stays silent. A new approach is announced again: the curve comes back from outside the 10 s window (for example the next simulation lap), or more than 20 s have passed. |
 | Suppression | Nothing is spoken while the forecast is suppressed. If a pre-warning is still pending when the forecast flips to suppressed, speech is stopped and a silent "안내 취소" event is shown. |
 | Simulation | Every simulated announcement starts with "시뮬레이션 안내:". |
@@ -89,15 +96,38 @@ taps 140 ms apart.
 |---|---|---|
 | Train observations | Seoul Open Data Plaza `realtimePosition` (lines 1–9) through our proxy. **Station-level only**: last station, state (진입/도착/출발/전역출발), direction, timestamp. No coordinates, no speed, no curve timing. | 실시간 / 캐시 banner; per-train freshness (`N초 전 관측`); 키 없음 / 호출 한도 / 연결 불가 when it fails. No example trains are ever shown in place of live data. |
 | Station positions | Approximate public station coordinates | station-level, approximate |
-| Curve geometry | Line 2 main loop (43 stations): curves approximated from OpenStreetMap station coordinates. **Not surveyed track alignment.** | Route card badge **역 좌표 근사 곡선** (only fully verified data would read 검수 노선 자료); `source: 'station-geometry-approx'` with a confidence |
+| Curve geometry | Line 2 main loop (43 stations): station-coordinate approximations, with 잠실↔잠실나루 replaced by an unverified OSM railway centerline. **Not surveyed track alignment.** | `source: 'station-geometry-approx'` or `'osm-centerline'`; only verified data uses `'curated'` |
 | Live forecast | Estimated from station-level data, shown as ranges; direction only from verified curves | **실시간 관측 기반 추정** (`source: 'live-estimate'`) |
-| Simulation | A virtual train on Line 2 신촌→홍대입구 (1.24 km, approximate curves), looping every ~113 s. Not linked to any real train. | **시뮬레이션 · 가상 선로**, route badge **가상 주행**, spoken prefix "시뮬레이션 안내:" |
+| Simulation | A virtual train on a selected Line 2 segment (currently 잠실→잠실나루, unverified OSM centerline). Not linked to any real train. | **시뮬레이션 · 가상 선로**, route badge **가상 주행**, spoken prefix "시뮬레이션 안내:" |
 
 Because the live feed has no speed or exact position, live forecasts are
 estimates. They are often suppressed (for example when the train is stopped
 at a station or the observation is stale). That is intended behaviour.
 
 ## Run it
+
+### Vercel web deployment
+
+Run `pnpm install --frozen-lockfile` and `pnpm run build:web` from the workspace
+root. `vercel.json` serves this app's `dist/` output and the standalone
+`api/subway/trains.ts` / `api/healthz.ts` functions from the same HTTPS origin.
+The web client uses relative API URLs; native clients can set
+`EXPO_PUBLIC_API_URL` to the deployment origin. Keep `SEOUL_SUBWAY_API_KEY`
+in Vercel server environment variables, never in an `EXPO_PUBLIC_*` variable.
+
+The current default simulation uses the mapped OSM 잠실→잠실나루 rail
+centerline, with a simulated speed profile. Its 23 nodes, three ways,
+retrieval time, ODbL attribution and processing method are stored in
+`data/sources/` and `data/line2Centerline.ts`. It is explicitly unvalidated;
+live sway warnings remain on hold. Other Line 2 segments use approximate
+station geometry. The smartphone location button suggests nearby Line 2
+stations only; users must confirm their actual station and train.
+
+Browser location and motion require a secure context and explicit permission.
+Underground GPS may be unavailable. A desktop can use the labelled simulation
+without either permission. Korean speech depends on installed browser voices;
+the ride screen provides a voice-test button. Current provider caching and
+quota accounting are per server process, not a distributed global limit.
 
 On Replit the two workflows start automatically:
 
@@ -145,10 +175,12 @@ After an intentional API contract change, regenerate the fixtures with
 
 - **No speed or exact position in the live feed.** Live timing is an estimate
   with wide ranges and is suppressed whenever it is uncertain.
-- **Curve geometry is approximate**, not surveyed alignment. Cant is usually
-  unknown and ignored. Expect direction to be right more often than timing.
-- **Simplified physics**: point mass and steady turn. No suspension, jerk
-  comfort model, crowding or braking or acceleration on straights.
+- **Curve geometry is unverified**, not surveyed alignment. Unknown cant holds
+  live guidance; simulation labels the zero-cant assumption. Direction and timing
+  accuracy both require field validation.
+- **Simplified physics**: quasi-static track-plane acceleration. Full analytical
+  jerk includes speed, curvature and cant changes when available; it is not a
+  validated comfort/fall-risk model. No suspension, crowding or human balance dynamics.
 - **Quota**: the Seoul API allows about 1000 calls a day. The proxy caches and
   keeps a reserve, so during heavy demos it can report `quota`.
 - **Upstream transport**: the official realtime API is only reachable at
@@ -156,7 +188,7 @@ After an intentional API contract change, regenerate the fixtures with
   key is only used server-side, but on that hop it travels unencrypted. Set
   `SEOUL_SUBWAY_API_BASE` to an HTTPS relay to avoid this; plain-HTTP
   overrides are rejected.
-- **Live guidance is held** until verified curve data exists (see Physics).
+- **Live guidance is held** until verified curve and explicit cant data exist (see Physics).
 - **TTS quality depends on the device.** Phones without a Korean voice
   (or browsers without one) report voice as unavailable.
 - **Guidance works only in the foreground.** Leaving the app stops speech

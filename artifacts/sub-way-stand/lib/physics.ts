@@ -5,7 +5,7 @@
  * Sign convention (travel frame, facing the direction of travel):
  *   curvature κ > 0  → LEFT curve,  κ < 0 → RIGHT curve   (κ = 1/R)
  *   cant θ > 0       → track banked toward the left
- *   vehicle lateral acceleration  a_y = v²·κ − g·sin θ   (cant only when known)
+ *   track-plane uncompensated acceleration a_y = v²·κ·cos θ − g·sin θ
  *   a_y > 0 → the passenger is pushed to the RIGHT (inertia, outward of a left curve)
  *   a_y < 0 → the passenger is pushed to the LEFT
  *
@@ -51,8 +51,11 @@ export function lateralAcceleration(speed: number, curvature: number, cantRad?: 
   if (cantRad !== undefined && (!Number.isFinite(cantRad) || Math.abs(cantRad) > MAX_CANT_RAD)) {
     throw new RangeError("invalid cant");
   }
-  const cantTerm = cantRad === undefined ? 0 : G * Math.sin(cantRad);
-  return noNegZero(speed * speed * curvature - cantTerm);
+  // Undefined cant is a LEVEL-TRACK ASSUMPTION, never a measurement of zero.
+  const theta = cantRad ?? 0;
+  const acceleration = speed * speed * curvature * Math.cos(theta) - G * Math.sin(theta);
+  if (!Number.isFinite(acceleration)) throw new RangeError("acceleration overflow");
+  return noNegZero(acceleration);
 }
 
 /** Direction the passenger's body is pushed. */
@@ -72,8 +75,8 @@ export function turnSide(curvature: number): Side {
 /* ------------------------------------------------------------------ */
 
 /**
- * Peak lateral acceleration below which a passenger barely notices the sway
- * (m/s²). Curves whose upper bound stays below this are not announced.
+ * Product threshold for displaying a cue (m/s²), NOT a validated human
+ * perception, comfort, injury or fall threshold.
  */
 export const COMFORT_THRESHOLD_MS2 = 0.15;
 
@@ -94,7 +97,7 @@ export function signedCant(cantRad: number | undefined, turn: TurnSide): number 
   return noNegZero(turn === "left" ? cantRad : -cantRad);
 }
 
-/** Without cant the passenger always leans away from the turn. */
+/** On level track the apparent inertial push is away from the turn. */
 export function passengerSway(turn: TurnSide): TurnSide {
   return turn === "left" ? "right" : "left";
 }
@@ -107,13 +110,15 @@ export type AccelBand = {
   max: number;
   /** Passenger sway direction, `none` when ambiguous or negligible. */
   sway: Side;
-  /** True when cant makes the direction flip inside the speed band. */
+  /** True when the band does not have one resolved direction throughout. */
   ambiguous: boolean;
 };
 
 /**
  * Lateral acceleration over a speed band [vLo, vHi] on one curve.
- * a(v) = v²κ − g·sinθ is monotonic in v ≥ 0, so the band endpoints bound it.
+ * a(v) = v²κ·cosθ − g·sinθ is monotonic in v ≥ 0 for the allowed cant,
+ * so the band endpoints bound it. Do not choose the larger endpoint's
+ * direction when the other endpoint is unresolved or points the other way.
  */
 export function lateralAccelBand(
   speedLo: number,
@@ -127,12 +132,13 @@ export function lateralAccelBand(
   const aLo = lateralAcceleration(speedLo, curvature, cantRad);
   const aHi = lateralAcceleration(speedHi, curvature, cantRad);
   const crosses = (aLo < 0 && aHi > 0) || (aLo > 0 && aHi < 0);
-  const ambiguous = crosses && Math.min(Math.abs(aLo), Math.abs(aHi)) >= SWAY_THRESHOLD;
-  const dominant = Math.abs(aHi) >= Math.abs(aLo) ? aHi : aLo;
+  const sLo = swayDirection(aLo);
+  const sHi = swayDirection(aHi);
+  const ambiguous = crosses || sLo !== sHi;
   return {
     min: crosses ? 0 : Math.min(Math.abs(aLo), Math.abs(aHi)),
     max: Math.max(Math.abs(aLo), Math.abs(aHi)),
-    sway: ambiguous ? "none" : swayDirection(dominant),
+    sway: ambiguous ? "none" : sLo,
     ambiguous,
   };
 }
@@ -140,7 +146,36 @@ export function lateralAccelBand(
 /** Rate of change of lateral acceleration while entering a spiral: j = v³ · dκ/ds (m/s³). */
 export function transitionJerk(speed: number, dKappaDs: number): number {
   if (!allFinite(speed, dKappaDs) || speed < 0) throw new RangeError("invalid jerk inputs");
-  return noNegZero(speed * speed * speed * dKappaDs);
+  return lateralJerk({ speed, curvature: 0, curvatureSlope: dKappaDs });
+}
+
+export type LateralJerkInput = {
+  speed: number;
+  curvature: number;
+  /** dv/dt, m/s² (negative while braking). */
+  longitudinalAcceleration?: number;
+  /** dκ/ds, 1/m². */
+  curvatureSlope?: number;
+  cantRad?: number;
+  /** dθ/ds, rad/m. */
+  cantSlope?: number;
+};
+
+/**
+ * Time derivative of the quasi-static track-plane acceleration (m/s³):
+ * j = (2v·dv/dt·κ + v³·dκ/ds)cosθ
+ *     − (v²κ sinθ + g cosθ)·v·dθ/ds.
+ * Suspension/roll dynamics and shocks are outside this model.
+ */
+export function lateralJerk(input: LateralJerkInput): number {
+  const { speed: v, curvature: k, longitudinalAcceleration: a = 0,
+    curvatureSlope: dk = 0, cantRad: theta = 0, cantSlope: dt = 0 } = input;
+  lateralAcceleration(v, k, theta); // validate speed, curvature and cant
+  if (!allFinite(a, dk, dt)) throw new RangeError("invalid jerk inputs");
+  const j = (2 * v * a * k + v * v * v * dk) * Math.cos(theta)
+    - (v * v * k * Math.sin(theta) + G * Math.cos(theta)) * v * dt;
+  if (!Number.isFinite(j)) throw new RangeError("jerk overflow");
+  return noNegZero(j);
 }
 
 /** Relative scale for UI wording only — not a comfort or safety metric. */
@@ -225,28 +260,28 @@ export function forecast(input: ForecastInput): Forecast {
   if (g.speedMax < 0.5) reasons.push("stationary");
   if (g.curvature === 0) return suppressedResult([...reasons, "straight"]);
 
-  const aLo = lateralAcceleration(g.speedMin, g.curvature, g.cantRad);
-  const aHi = lateralAcceleration(g.speedMax, g.curvature, g.cantRad);
-  const sLo = swayDirection(aLo);
-  const sHi = swayDirection(aHi);
+  let band: AccelBand;
+  try {
+    band = lateralAccelBand(g.speedMin, g.speedMax, g.curvature, g.cantRad);
+  } catch {
+    return suppressedResult([...reasons, "invalid"]);
+  }
   if (g.speedMin <= 0) reasons.push("ambiguous"); // unbounded window
-  if (sLo !== sHi || sLo === "none") reasons.push("ambiguous"); // e.g. cant flips the sign
+  if (band.ambiguous || band.sway === "none") reasons.push("ambiguous");
 
   if (reasons.length > 0) return suppressedResult(reasons);
 
   const window: [number, number] = [g.distanceMin / g.speedMax, g.distanceMax / g.speedMin];
+  if (!allFinite(...window)) return suppressedResult(["invalid"]);
   const spread = window[1] - window[0];
   if (spread > MAX_WINDOW_SPREAD_S) return suppressedResult(["ambiguous"]);
 
-  const accel: [number, number] = [
-    Math.min(Math.abs(aLo), Math.abs(aHi)),
-    Math.max(Math.abs(aLo), Math.abs(aHi)),
-  ];
+  const accel: [number, number] = [band.min, band.max];
   return {
     suppressed: false,
     reasons: [],
     turn: turnSide(g.curvature),
-    sway: sLo,
+    sway: band.sway,
     window,
     accel,
     intensity: intensityOf(accel[1]),
@@ -408,6 +443,13 @@ export function syntheticDistance(t: number): number {
   return baseSpeed * t + (speedAmplitude / w) * (1 - Math.cos(w * t));
 }
 
+/** Exact dv/dt for the sinusoidal synthetic speed, m/s². */
+export function syntheticLongitudinalAcceleration(t: number): number {
+  const { speedAmplitude, periodS } = SYN_PARAMS;
+  const w = (2 * Math.PI) / periodS;
+  return speedAmplitude * w * Math.cos(w * t);
+}
+
 export type SyntheticFrame = {
   t: number;
   lap: number;
@@ -468,7 +510,9 @@ export function syntheticFrame(t: number, track: Track = SYN_A): SyntheticFrame 
     curvature,
     accel,
     sway: swayDirection(accel),
-    jerk: transitionJerk(speed, curvatureSlopeAt(track, s)),
+    jerk: lateralJerk({ speed, curvature,
+      longitudinalAcceleration: syntheticLongitudinalAcceleration(t),
+      curvatureSlope: curvatureSlopeAt(track, s) }),
     upcoming,
     approaching: !!upcoming && !upcoming.inside && !!fc.window && fc.window[0] <= horizonS,
     predictedAccel: upcoming ? lateralAcceleration(speed, upcoming.curve.curvature) : null,

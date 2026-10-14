@@ -9,7 +9,11 @@
  *
  * Pure logic + injectable fetch so it can be unit-tested without network access.
  */
-import type { Train, TrainResponse } from "@workspace/api-zod";
+import type { GetSubwayTrainsResponse } from "../../../../lib/api-zod/src/generated/api.ts";
+// Derive the adapter types from the response schema directly. Explicit source
+// paths also work in Vercel's NodeNext compiler, unlike extensionless barrels.
+type TrainResponse = (typeof GetSubwayTrainsResponse)["_output"];
+type Train = TrainResponse["trains"][number];
 
 export const DAILY_LIMIT = 1000;
 export const QUOTA_RESERVE = 50;
