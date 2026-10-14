@@ -14,6 +14,3 @@ description: How main-agent work interacts with the parallel project tasks (#1 s
 
 - Main already holds pre-built, tested modules from before the task split (physics engine, alert policy, announcer,
   freshness, UI components, server proxy). Task agents should reuse them rather than re-create them.
-
-- Mobile logic tests: `node --no-warnings --test tests/*.test.mts` from the mobile package. A bare directory arg fails.
-  Use `.mts` so Expo's tsconfig doesn't include them, and keep `lib/` files free of value imports so Node can run them.
