@@ -1,0 +1,175 @@
+# SUB WAY 2 STAND — Critical Integration & Physics Validation
+
+## Mission
+
+Our highest priority is to transform SUB WAY 2 STAND from two separate systems into **one working, real-world subway motion prediction product**.
+
+Currently, we have:
+
+1. A system that tracks real Seoul subway trains.
+2. A physics engine that simulates train motion.
+
+**However, we have not demonstrated that these systems are actually connected using real track geometry and real operating conditions.**
+
+This is the single most important technical problem to solve.
+
+Do not add new features or redesign the app until the core integration is verified.
+
+## 1. Audit the current implementation
+
+Inspect the existing code and determine:
+
+- Does the live subway API actually feed the physics prediction engine?
+- Does the engine know which railway segment the selected train occupies?
+- Are curvature values calculated from actual railway track geometry or synthetic coordinates?
+- Is the train's velocity measured, inferred, or hardcoded?
+- Are predicted sway direction, magnitude, and arrival time based on actual train state?
+- Can the system distinguish verified predictions from simulations?
+
+Report what is real, estimated, simulated, or missing.
+
+Do not confuse passing unit tests with real-world prediction accuracy.
+
+## 2. Connect real track geometry
+
+Find and integrate the best legally reusable railway alignment data available for Seoul subway lines.
+
+Prioritize OpenStreetMap, OpenRailwayMap, official GIS sources, and other verifiable datasets.
+
+Requirements:
+
+- Use actual track centerline coordinates, not schematic subway maps or straight lines between stations.
+- Convert geographic coordinates into an appropriate metric coordinate system before calculating curvature.
+- Calculate signed curvature and identify curve entry/exit locations.
+- Smooth geometry carefully without removing meaningful curves.
+- Store data source, precision limitations, and confidence metadata.
+- Support multiple subway lines through the same engine.
+
+If accurate railway geometry is unavailable for a segment, disable real-world motion predictions for that segment.
+
+Do not invent track geometry.
+
+## 3. Connect live train position and speed estimation
+
+Use the Seoul real-time subway API to identify the selected train and track its latest station-level position and operating state.
+
+Develop a bounded train-state estimator using:
+
+- Last confirmed station
+- Travel direction
+- Departure and arrival status
+- Observation timestamps
+- Distance between stations
+- Available historical travel times
+- Plausible acceleration and braking profiles
+
+Estimate the train's possible position and velocity as intervals rather than pretending exact measurements exist.
+
+Recalculate whenever new information arrives.
+
+If the train stops unexpectedly, information becomes stale, or location uncertainty becomes too large, suspend precise motion predictions and alerts.
+
+Do not claim that the public API provides instantaneous speed or exact train coordinates.
+
+## 4. Implement the real prediction pipeline
+
+Build this actual end-to-end flow:
+
+**Live Train API → Train State Estimator → Real Track Geometry → Physics Engine → Motion Forecast → Passenger Alert**
+
+The physics engine should estimate:
+
+- Lateral acceleration from curvature and velocity
+- Cant compensation when reliable cant information exists
+- Changes in lateral acceleration (jerk)
+- Predicted direction of passenger sway
+- Estimated curve entry time window
+- Prediction uncertainty
+
+Use physically consistent units and coordinate conventions.
+
+Vehicle-specific suspension models are optional. Do not sacrifice reliable core calculations to implement unnecessary complexity.
+
+The same engine must be reusable across different subway lines.
+
+## 5. Validate using real measurement datasets
+
+Use the existing research references:
+
+- ETH Zurich Railway Precise Localization — GNSS, speed, accelerometer, gyroscope
+- MetroDataset — railway bogie vibration measurements
+
+Prioritize ETH Zurich for validating the relationship between train motion, position, and measured acceleration.
+
+MetroDataset may be used separately to demonstrate irregular vibration characteristics, but never present its recordings as Seoul subway passenger measurements.
+
+Where valid alignment and sensor data exist, compare model predictions with actual measurements.
+
+Measure:
+
+- Motion direction accuracy
+- Acceleration MAE
+- Event timing error
+- False warnings and missed events
+
+Prevent future-data leakage when evaluating prediction performance.
+
+Do not fabricate performance metrics.
+
+If real measurement validation cannot be completed, explicitly report it as unvalidated.
+
+## 6. Demonstrate the integration
+
+Create a reliable demonstration with two clearly separated modes.
+
+**LIVE MODE**
+
+Display the selected real train, last observed station, direction, update time, and prediction availability.
+
+Only show a real upcoming motion prediction if sufficiently reliable track geometry and train-state estimates are available.
+
+Otherwise show "예측 정보 확인 중" or "예측 보류".
+
+**VALIDATION / SIMULATION MODE**
+
+Use an explicitly labeled track scenario or recorded dataset to demonstrate upcoming curve prediction, passenger sway, and Korean voice warnings.
+
+Never present simulated motion as the actual future motion of a live Seoul subway train.
+
+## 7. Acceptance criteria
+
+The task is complete only when:
+
+- The selected live train state reaches the prediction pipeline.
+- Real railway geometry is integrated for at least one verified segment, or the limitation is clearly documented.
+- Prediction inputs and data provenance can be inspected.
+- The model handles stationary trains, delays, stale data, and uncertainty.
+- Physics unit tests pass.
+- The existing native mobile app remains functional.
+- Real measurements are used for validation wherever feasible.
+- A reproducible end-to-end demonstration is available.
+
+Do not report "real-time motion prediction completed" if the system is only running synthetic simulations.
+
+## 8. Time and implementation priority
+
+We are in a 3-hour hackathon.
+
+Prioritize in this order:
+
+1. Preserve the existing working mobile app.
+2. Verify and connect live train state to the physics pipeline.
+3. Integrate reliable real track geometry for at least one segment.
+4. Produce a real forecast or safely suspend it when uncertainty is excessive.
+5. Run validation tests and record actual results.
+6. Improve remaining details only if time permits.
+
+Avoid unnecessary abstractions, large dataset downloads, unrelated features, or extensive planning.
+
+Use existing code and completed tasks rather than rebuilding everything.
+
+If parallel work is possible, delegate track geometry, train-state estimation, and physics validation to independent workers with non-overlapping files.
+
+**Start implementation immediately. Do not stop after an audit or planning document.**
+
+The final result must demonstrate the difference between a simulation and a genuinely connected real-world prediction system.
