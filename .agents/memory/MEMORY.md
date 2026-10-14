@@ -1,2 +1,3 @@
 - [Task-agent coordination](task-coordination.md) — file ownership across parallel tasks, merge lock behavior, reuse existing tested modules, node test command quirk.
 - [Seoul data sources](seoul-data-sources.md) — provider is HTTP-only, `sample` key, Nominatim works/Overpass doesn't, 내선/외선 semantics.
+- [Mobile UI verification](ui-verification.md) — `/ride?sim=1` for screenshots, typecheck @types/node fix, fixture vs live labeling rule.

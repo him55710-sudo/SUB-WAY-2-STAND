@@ -1,5 +1,7 @@
 import { Feather } from '@expo/vector-icons';
-import React from 'react';
+import { Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -11,13 +13,21 @@ import {
   type TextStyle,
   type ViewStyle,
 } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { typography } from '@/constants/colors';
 import { useColors } from '@/hooks/useColors';
 
-export const NUM_FONT = 'Inter_600SemiBold';
-export const NUM_FONT_BOLD = 'Inter_700Bold';
+export const NUM_FONT = typography.num;
+export const NUM_FONT_BOLD = typography.numBold;
 
-type FeatherName = React.ComponentProps<typeof Feather>['name'];
+export type FeatherName = React.ComponentProps<typeof Feather>['name'];
 export type Tone = 'live' | 'synthetic' | 'warn' | 'danger' | 'muted';
 
 export function useScreenInsets() {
@@ -288,7 +298,158 @@ export function Stat({ label, value, unit, style }: { label: string; value: stri
   );
 }
 
+/** Wall clock that re-renders every `intervalMs` (for "N초 전" freshness labels). */
+export function useTicker(intervalMs = 1000): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
+  return now;
+}
+
+/**
+ * Dark native-stack chrome for the current screen. Only styling is set here (titles and
+ * visibility stay in app/_layout.tsx) so the screen never remounts.
+ */
+export function DarkScreenChrome() {
+  const c = useColors();
+  return (
+    <>
+      <StatusBar style="light" />
+      <Stack.Screen
+        options={{
+          headerStyle: { backgroundColor: c.background },
+          headerTintColor: c.foreground,
+          headerShadowVisible: false,
+          headerTitleStyle: { fontWeight: '700', color: c.foreground },
+          contentStyle: { backgroundColor: c.background },
+        }}
+      />
+    </>
+  );
+}
+
+/** Pill chip used for line / station quick filters. */
+export function Chip({
+  label,
+  selected,
+  onPress,
+  color,
+  onColor,
+  leading,
+  testID,
+  accessibilityLabel,
+}: {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+  /** Fill colour when selected (defaults to the cream primary). */
+  color?: string;
+  onColor?: string;
+  leading?: React.ReactNode;
+  testID?: string;
+  accessibilityLabel?: string;
+}) {
+  const c = useColors();
+  const fill = color ?? c.primary;
+  return (
+    <Pressable
+      testID={testID}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      accessibilityLabel={accessibilityLabel ?? label}
+      onPress={onPress}
+      hitSlop={4}
+      style={({ pressed }) => [
+        styles.chip,
+        {
+          backgroundColor: selected ? fill : c.card,
+          borderColor: selected ? fill : c.border,
+          opacity: pressed ? 0.8 : 1,
+        },
+      ]}
+    >
+      {leading}
+      <Text style={[styles.chipText, { color: selected ? (onColor ?? c.primaryForeground) : c.foreground }]}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+/** Two-to-four option segmented control with radio semantics. */
+export function Segmented<T extends string>({
+  options,
+  value,
+  onChange,
+  label,
+}: {
+  options: { value: T; label: string }[];
+  value: T;
+  onChange: (v: T) => void;
+  label: string;
+}) {
+  const c = useColors();
+  return (
+    <View
+      accessibilityRole="radiogroup"
+      accessibilityLabel={label}
+      style={[styles.segmented, { backgroundColor: c.sunken, borderColor: c.border }]}
+    >
+      {options.map((o) => {
+        const on = o.value === value;
+        return (
+          <Pressable
+            key={o.value}
+            testID={`seg-${o.value}`}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: on }}
+            accessibilityLabel={`${label} ${o.label}`}
+            onPress={() => onChange(o.value)}
+            style={({ pressed }) => [
+              styles.segment,
+              { backgroundColor: on ? c.raised : 'transparent', borderColor: on ? c.borderStrong : 'transparent', opacity: pressed ? 0.8 : 1 },
+            ]}
+          >
+            <Text style={[styles.segmentText, { color: on ? c.foreground : c.mutedForeground }]}>{o.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/** Pulsing placeholder block; static when the OS asks for reduced motion. */
+export function Skeleton({ width, height, radius = 8, style }: { width: number | `${number}%`; height: number; radius?: number; style?: StyleProp<ViewStyle> }) {
+  const c = useColors();
+  const reduced = useReducedMotion();
+  const o = useSharedValue(0.55);
+  useEffect(() => {
+    if (reduced) {
+      o.set(0.55);
+      return;
+    }
+    o.set(withRepeat(withTiming(1, { duration: 750 }), -1, true));
+  }, [reduced, o]);
+  const anim = useAnimatedStyle(() => ({ opacity: o.get() }));
+  return <Animated.View style={[{ width, height, borderRadius: radius, backgroundColor: c.raised }, anim, style]} />;
+}
+
 const styles = StyleSheet.create({
+  chip: {
+    minHeight: 40,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  chipText: { fontSize: 14, fontWeight: '700' },
+  segmented: { flexDirection: 'row', borderWidth: 1, borderRadius: 12, padding: 3, gap: 3 },
+  segment: { flex: 1, minHeight: 42, borderRadius: 9, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  segmentText: { fontSize: 14, fontWeight: '700' },
   badge: {
     flexDirection: 'row',
     alignItems: 'center',

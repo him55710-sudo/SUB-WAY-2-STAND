@@ -52,7 +52,7 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
       {__DEV__ ? (
         <Pressable
           onPress={() => setIsModalVisible(true)}
-          accessibilityLabel="View error details"
+          accessibilityLabel="오류 상세 보기"
           accessibilityRole="button"
           style={({ pressed }) => [
             styles.topButton,
@@ -69,15 +69,17 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
 
       <View style={styles.content}>
         <Text style={[styles.title, { color: colors.foreground }]}>
-          Something went wrong
+          문제가 발생했어요
         </Text>
 
         <Text style={[styles.message, { color: colors.mutedForeground }]}>
-          Please reload the app to continue.
+          앱을 다시 불러오면 계속 사용할 수 있어요.
         </Text>
 
         <Pressable
           onPress={handleRestart}
+          accessibilityRole="button"
+          accessibilityLabel="앱 다시 불러오기"
           style={({ pressed }) => [
             styles.button,
             {
@@ -90,7 +92,7 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
           <Text
             style={[styles.buttonText, { color: colors.primaryForeground }]}
           >
-            Try Again
+            다시 시도
           </Text>
         </Pressable>
       </View>
@@ -116,11 +118,11 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
                 ]}
               >
                 <Text style={[styles.modalTitle, { color: colors.foreground }]}>
-                  Error Details
+                  오류 상세
                 </Text>
                 <Pressable
                   onPress={() => setIsModalVisible(false)}
-                  accessibilityLabel="Close error details"
+                  accessibilityLabel="오류 상세 닫기"
                   accessibilityRole="button"
                   style={({ pressed }) => [
                     styles.closeButton,
