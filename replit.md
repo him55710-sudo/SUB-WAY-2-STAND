@@ -1,6 +1,6 @@
-# [Project name]
+# SUB WAY 2 STAND
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+Korean mobile app (Expo) that tells a standing Seoul subway rider which way they will sway before an upcoming curve, with honest labeling of live, estimated, fixture and simulated data.
 
 ## Run & Operate
 
@@ -8,8 +8,9 @@ _Replace the heading above with the project's name, and this line with one sente
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- `pnpm --filter @workspace/sub-way-stand test` — mobile unit tests (Node built-in runner over `artifacts/sub-way-stand/tests/**/*.test.ts`)
+- Required env (API): `SEOUL_SUBWAY_API_KEY` — without it `/api/subway/trains` returns `status: missing_key`
+- Mobile feature flags (all default ON): `EXPO_PUBLIC_FLAG_LIVE_TRAINS`, `EXPO_PUBLIC_FLAG_PHYSICS_FORECAST`, `EXPO_PUBLIC_FLAG_VOICE_GUIDANCE`, `EXPO_PUBLIC_FLAG_HAPTICS`, `EXPO_PUBLIC_FLAG_SIMULATION_FALLBACK` — set to `0` to turn off
 
 ## Stack
 
@@ -19,14 +20,36 @@ _Replace the heading above with the project's name, and this line with one sente
 - Validation: Zod (`zod/v4`), `drizzle-zod`
 - API codegen: Orval (from OpenAPI spec)
 - Build: esbuild (CJS bundle)
+- Mobile: Expo 57 + expo-router (stack: `index` = 열차 선택, `ride` = 탑승 안내), TypeScript 6
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- API contract: `lib/api-spec/openapi.yaml` (`GET /api/subway/trains`); proxy in `artifacts/api-server/src/lib/seoulSubway.ts`
+- Mobile app: `artifacts/sub-way-stand/` (paths below are relative to it)
+  - `contracts/index.ts` — every shared type + service signature (source of truth)
+  - `config/flags.ts` — feature flags, required off-behaviour, app config
+  - `session/RideSession.tsx` — current `RideSelection`
+  - `services/*.ts` — implementations of the contract signatures; screens import only these
+
+## File ownership (parallel tasks — do not edit files you don't own)
+
+| Owner | Files (under `artifacts/sub-way-stand/` unless noted) |
+|---|---|
+| Integrator (contracts/skeleton, final integration) | `contracts/`, `config/`, `session/`, `app/**` (layouts + route files, which only re-export screens), `package.json`, `tsconfig.json`, `replit.md` |
+| Backend/data (live trains proxy, route data) | `services/trains.ts`, `data/**` (route data), `artifacts/api-server/**`, `lib/api-spec/**` + generated clients |
+| Physics (curve sway forecast) | `lib/physics.ts`, `services/forecast.ts`, `services/simulation.ts`, any new `lib/forecast*`/`lib/simulation*` |
+| UI (screens, map, motion) | `screens/**`, `components/**`, `constants/colors.ts`, `hooks/useColors.ts` (theme) |
+| Voice/docs (Korean voice, haptics) | `services/guidance.ts`, `README.md`, demo docs (`docs/**`) |
+
+- Tests: each owner adds its own `tests/<area>.test.ts`; don't edit another owner's test file.
+- Need a contract or dependency change? Don't edit integrator files — note it in your task report.
+- Every stub/fixture must stay visibly labeled (`origin: 'fixture'`, `source: 'simulation'`); never present it as live.
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- Screens depend only on `contracts/` signatures via `services/*`; each service started as a labeled stub so tasks can swap implementations without touching screens.
+- The live feed is station-level only (no speed/position), so live forecasts are estimates with ranges and must suppress (with a reason) rather than guess.
+- Flags default ON; turning one off must degrade safely (simulation, muted, or suppressed), never crash.
 
 ## Product
 
@@ -38,7 +61,12 @@ _Populate as you build — explicit user instructions worth remembering across s
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- **Open security issue (backend/data owner):** the live proxy (`artifacts/api-server/src/lib/seoulSubway.ts`) calls `http://swopenapi.seoul.go.kr/...` with `SEOUL_SUBWAY_API_KEY` in the URL path, so the key would travel in plaintext. Move to a TLS upstream (or HTTPS relay) and add a test that rejects plaintext bases before setting the key. Note: `https://swopenapi.seoul.go.kr` timed out from this environment on 2026-10-14.
+
+- Mobile tests run under plain Node (type stripping): import sources by relative path **with `.ts`**, use only `import type` from `@/contracts`; `@/` value imports and React Native modules don't resolve there. Keep testable logic in pure modules.
+- Mobile uses TypeScript 6, whose default `types` is `[]`; `@types/node` is enabled explicitly in its tsconfig for `node:test`.
+- Keep the mobile `@types/react` on `catalog:` — a second `@types/react` version gets hoisted and breaks the mockup-sandbox typecheck.
+- Typed routes live in `.expo/types/router.d.ts`, generated by the Expo dev server; restart the Expo workflow after adding/removing route files or typecheck rejects the new paths.
 
 ## Pointers
 
